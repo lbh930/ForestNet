@@ -213,7 +213,7 @@ def _generate_branch_stepwise(
                     is_root=False,
                     position=parent_node.position,
                     direction=branch_direction,
-                    radius=child_r,
+                    radius=child_r * random.uniform(0.6, 0.8),  # Slightly randomize radius
                     level=parent_node.level + 1
                 )
                 parent_node.add_child(branch_node)
