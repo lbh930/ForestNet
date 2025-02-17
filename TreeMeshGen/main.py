@@ -1,10 +1,12 @@
 import math
-
 import matplotlib.pyplot as plt
 import numpy as np
 from common import vec3
 from gen_mesh import Mesh, export_mesh_to_obj, generate_tree_mesh
+
+# 注意：这里假设你已经将新的Allometry版本的代码依然命名为 gen_nodes.py，并且保留了 gen_tree() 接口
 from gen_nodes import TreeNode, gen_tree
+
 from mpl_toolkits.mplot3d import Axes3D
 
 
@@ -59,6 +61,7 @@ def _draw_circle_at_node(ax, node: TreeNode, circle_points=32):
     # Plot the circle in 3D
     ax.plot(X, Y, Z, color='r', linewidth=0.8)
 
+
 def visualize_tree(node: TreeNode, ax, parent_position=None):
     """
     Recursively visualize the tree structure in 3D.
@@ -76,7 +79,8 @@ def visualize_tree(node: TreeNode, ax, parent_position=None):
             [parent_position.x, node.position.x],
             [parent_position.y, node.position.y],
             [parent_position.z, node.position.z],
-            'k-', linewidth=0.5
+            'k-',
+            linewidth=0.5
         )
 
     # Draw a circle representing the radius at the current node
@@ -85,6 +89,8 @@ def visualize_tree(node: TreeNode, ax, parent_position=None):
     # Recursively visualize children
     for child in node.children:
         visualize_tree(child, ax, node.position)
+
+
 def main():
     """Generate and visualize a tree."""
     # Define tree parameters
@@ -100,7 +106,13 @@ def main():
     base_branching_probability = 0.4
     curvature_range = (0.0, 0.25)
 
-    # Generate the tree
+    # ----- NEW: Allometry-related hyperparameters -----
+    # You can adjust these to see how the tree shape changes.
+    area_fraction = 0.8       # fraction of parent cross-sectional area allocated to child branches
+    end_radius_ratio = 0.3    # ratio of trunk end radius to start radius
+    radius_decay_exp = 1.5    # exponent controlling how quickly radius tapers
+
+    # Generate the tree (calling the updated gen_tree with allometric parameters)
     tree = gen_tree(
         starting_radius=starting_radius,
         starting_direction=starting_direction,
@@ -110,7 +122,12 @@ def main():
         step_size=step_size,
         base_branching_probability=base_branching_probability,
         curvature_range=curvature_range,
-        up_straightness=up_straightness
+        up_straightness=up_straightness,
+
+        # The new allometric hyperparameters:
+        area_fraction=area_fraction,
+        end_radius_ratio=end_radius_ratio,
+        radius_decay_exp=radius_decay_exp
     )
 
     # Set up a 3D plot
