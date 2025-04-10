@@ -45,6 +45,7 @@ oak_config = {
     "Curvature_Range": (0.0, 0.3),
     "Up_Straightness": 0.6,           # Moderately straight upward growth
     
+    # Optional simulation parameters:
     "starting_radius": 0.3,           # Oaks often start with a thicker trunk
     "maximum_levels": 5,
 }
@@ -60,14 +61,15 @@ broadleaf_config = {
     "Radius_Coefficient": 0.5,
     "Length_Coefficient": 0.4,        # Slightly larger length exponent for a different branching style
     
-    "Branching_Angle_Range:": (20, 50),  # A moderate branching angle range for generic broadleaf trees
+    "Branching_Angle_Range:": (20, 60),  # A moderate branching angle range for generic broadleaf trees
     "Step_Size": 1,
     "Branching_Probability": 0.45,    # A balanced branching probability
     "Curvature_Range": (0.0, 0.25),
     "Up_Straightness": 0.65,          # Fairly straight upward growth
     
+    # Optional simulation parameters:
     "starting_radius": 0.25,
-    "maximum_levels": 4,
+    "maximum_levels": 6,
 }
 
 
