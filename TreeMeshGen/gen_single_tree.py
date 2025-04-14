@@ -1,11 +1,12 @@
 import math
+
 import matplotlib.pyplot as plt
 import numpy as np
-from tools.common import vec3, process_config
+from mpl_toolkits.mplot3d import Axes3D
+from presets.trees import broadleaf_config, oak_config, pine_config
+from tools.common import process_config, vec3
 from tools.gen_mesh import Mesh, export_mesh_to_obj, generate_tree_mesh
 from tools.gen_nodes import TreeNode, gen_tree
-from mpl_toolkits.mplot3d import Axes3D
-from presets.trees import pine_config, oak_config, broadleaf_config
 
 
 def _draw_circle_at_node(ax, node: TreeNode, circle_points=32):
@@ -77,7 +78,7 @@ def run_tree_simulation(config):
     config = process_config(config)
     
     # Extract parameters from config.
-    starting_radius = config.get("starting_radius", 0.2)
+    starting_radius = config.get("DBH", 0.25)/2
     starting_direction = vec3(0, 0, 1)  # Vertical growth.
     total_length = config.get("Height", 10.0)
     maximum_levels = config.get("maximum_levels", 4)
@@ -114,7 +115,7 @@ def run_tree_simulation(config):
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
     
-    visualize_tree(tree, ax)
+    #visualize_tree(tree, ax)
     
     # Adjust axis limits.
     def get_limits(node, limits):
@@ -136,7 +137,7 @@ def run_tree_simulation(config):
     ax.set_ylim(y_mid - max_range / 2, y_mid + max_range / 2)
     ax.set_zlim(z_mid - max_range / 2, z_mid + max_range / 2)
     
-    plt.show()
+    #plt.show()
     
     # Generate the mesh and export to OBJ.
     mesh = generate_tree_mesh(tree, radial_segments=16)

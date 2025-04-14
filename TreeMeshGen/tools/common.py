@@ -80,4 +80,5 @@ def process_config(config):
         if "K" not in config or "Y" not in config:
             raise ValueError("Missing parameters K and Y for DBH computation.")
         config["DBH"] = (config["Height"] / config["K"]) ** (1 / config["Y"])
+        #print (f"DBH computed from Height: {config['DBH']}")
     return config

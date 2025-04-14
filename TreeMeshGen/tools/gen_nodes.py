@@ -3,6 +3,7 @@ import random
 
 from tools.common import vec3
 
+
 class TreeNode:
     """
     A tree node.
@@ -200,7 +201,7 @@ def _generate_branch_stepwise_allometric(
             for _ in range(branch_count):
                 # Calculate child branch radius using power-law scaling:
                 # child_radius = parent_radius × (branch_count^(–radius_coefficient))
-                child_r = parent_node.radius * (branch_count ** (-radius_coefficient))
+                child_r = parent_node.radius * ((branch_count+1) ** (-radius_coefficient)) #branch count plus one to enforce decreasing radius
                 child_r *= random.uniform(0.9, 1.1)  # Add slight random variation.
                 if child_r < min_radius:
                     child_r = min_radius
@@ -220,7 +221,7 @@ def _generate_branch_stepwise_allometric(
 
                 # Compute side branch length using power-law scaling:
                 # side_branch_length = total_length × (branch_count^(–length_coefficient))
-                sub_branch_length = total_length * (branch_count ** (-length_coefficient))
+                sub_branch_length = total_length * ((branch_count+1) ** (-length_coefficient)) #branch length plus one to enforece decreasing length
 
                 # Recursively generate the side branch.
                 _generate_branch_stepwise_allometric(

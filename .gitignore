@@ -4,3 +4,7 @@ ez-tree/
 *.ply
 *.obj
 LidarSimulator/__pycache__/
+*.pyc
+/__pycache__/*
+TreeMeshGen/tools/__pycache__/*
+TreeMeshGen/presets/__pycache__/*
