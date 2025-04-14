@@ -63,3 +63,21 @@ class vec3:
     
     def length(self):
         return math.sqrt(self.x**2 + self.y**2 + self.z**2)
+    
+
+def process_config(config):
+    """
+    Check and update the config parameters for Height and DBH.
+    
+    - If both Height and DBH are provided, use them directly.
+    - If Height is missing but DBH is provided, compute Height using H = K * DBH^Y.
+    """
+    if "Height" not in config and "DBH" in config:
+        if "K" not in config or "Y" not in config:
+            raise ValueError("Missing parameters K and Y for height computation.")
+        config["Height"] = config["K"] * (config["DBH"] ** config["Y"])
+    elif "Height" in config and "DBH" not in config:
+        if "K" not in config or "Y" not in config:
+            raise ValueError("Missing parameters K and Y for DBH computation.")
+        config["DBH"] = (config["Height"] / config["K"]) ** (1 / config["Y"])
+    return config

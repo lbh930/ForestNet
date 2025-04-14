@@ -1,3 +1,6 @@
 TreeMeshGen/__pycache__/
 ez-tree/
 .DS_Store
+*.ply
+*.obj
+LidarSimulator/__pycache__/

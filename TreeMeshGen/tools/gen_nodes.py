@@ -1,7 +1,7 @@
 import math
 import random
 
-from common import vec3
+from tools.common import vec3
 
 class TreeNode:
     """

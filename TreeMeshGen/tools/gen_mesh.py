@@ -2,7 +2,7 @@
 
 import math
 
-from common import vec3
+from tools.common import vec3
 
 
 class Mesh:
