@@ -8,3 +8,5 @@ LidarSimulator/__pycache__/
 /__pycache__/*
 TreeMeshGen/tools/__pycache__/*
 TreeMeshGen/presets/__pycache__/*
+*.png
+*.obj

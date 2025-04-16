@@ -75,10 +75,11 @@ def run_tree_simulation(config):
     3. Generate the tree, visualize it in 3D, and adjust the plot limits.
     4. Generate the tree mesh and export it as an OBJ file.
     """
+    
     config = process_config(config)
     
     # Extract parameters from config.
-    starting_radius = config.get("DBH", 0.25)/2
+    starting_radius = config.get("DBH", 0.25) / 2
     starting_direction = vec3(0, 0, 1)  # Vertical growth.
     total_length = config.get("Height", 10.0)
     maximum_levels = config.get("maximum_levels", 4)
@@ -92,6 +93,11 @@ def run_tree_simulation(config):
     radius_coefficient = config.get("Radius_Coefficient", 0.5)
     length_coefficient = config.get("Length_Coefficient", 0.33)
     
+    # New parameters for sympodial logic and height bounding.
+    sympodial_chance = config.get("Sympodial_Chance", 0.3)  # My comment: added new param for sympodial branching.
+    max_tree_height = config.get("Max_Tree_Height", total_length)  # My comment: bound tree height.
+    side_branch_decay = config.get("Side_Branch_Decay", 1.2)  # My comment: added decay factor for side branch length.
+
     # Generate the tree using the updated gen_tree signature.
     tree = gen_tree(
         starting_radius=starting_radius,
@@ -104,7 +110,10 @@ def run_tree_simulation(config):
         curvature_range=curvature_range,
         up_straightness=up_straightness,
         radius_coefficient=radius_coefficient,
-        length_coefficient=length_coefficient
+        length_coefficient=length_coefficient,
+        sympodial_chance=sympodial_chance,
+        max_tree_height=max_tree_height,
+        side_branch_decay=side_branch_decay
     )
     
     # Set up a 3D plot.
@@ -115,7 +124,7 @@ def run_tree_simulation(config):
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
     
-    #visualize_tree(tree, ax)
+    visualize_tree(tree, ax)
     
     # Adjust axis limits.
     def get_limits(node, limits):
@@ -138,6 +147,7 @@ def run_tree_simulation(config):
     ax.set_zlim(z_mid - max_range / 2, z_mid + max_range / 2)
     
     #plt.show()
+    plt.savefig("test_tree_node_structure.png", dpi=300)
     
     # Generate the mesh and export to OBJ.
     mesh = generate_tree_mesh(tree, radial_segments=16)
