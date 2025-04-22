@@ -60,18 +60,18 @@ broadleaf_config = {
     "Radius_Coefficient": 0.5,
     "Length_Coefficient": 0.5,      # Slightly larger length exponent for different branching style
     
-    "Branching_Angle_Range:": (45, 90),  # Broadleaf trees have wider branch angles
+    "Branching_Angle_Range:": (30, 90),  # Broadleaf trees have wider branch angles
     "Step_Size": 1,
-    "Branching_Probability": 0.2,   # Lower branching probability for open crown
+    "Branching_Probability": 0.4,   # Lower branching probability for open crown
     "Curvature_Range": (0.0, 0.3),
     "Up_Straightness": 0.25,        # Fairly weak vertical bias
     
     # Optional parameters:
     #"DBH": 0.5,
-    "maximum_levels": 5,
+    "maximum_levels": 7,
 
     # New parameters for sympodial simulation.
-    "Sympodial_Chance": 0.35,       # Moderate chance for sympodial switch in broadleaf
+    "Sympodial_Chance": 0.2,       # Moderate chance for sympodial switch in broadleaf
     "Max_Tree_Height": 25,         # Bound height to target Height
-    "Side_Branch_Decay": 1.4       # Slightly stronger decay for side branches.
+    "Side_Branch_Decay": 1.2       # Slightly stronger decay for side branches.
 }

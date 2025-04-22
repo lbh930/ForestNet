@@ -8,7 +8,6 @@ from tools.common import process_config, vec3
 from tools.gen_mesh import Mesh, export_mesh_to_obj, generate_tree_mesh
 from tools.gen_nodes import TreeNode, gen_tree
 
-
 def _draw_circle_at_node(ax, node: TreeNode, circle_points=32):
     """
     Draw a circle representing the node's cross section, perpendicular to its direction vector.
@@ -52,7 +51,11 @@ def visualize_tree(node: TreeNode, ax, parent_position=None):
     :param ax: Matplotlib 3D axis.
     :param parent_position: Position of the parent node (for connecting lines).
     """
-    ax.scatter(node.position.x, node.position.y, node.position.z, c='g', s=10)
+    if node.is_main:
+        ax.scatter(node.position.x, node.position.y, node.position.z, c='g', s=10)
+    else:
+        ax.scatter(node.position.x, node.position.y, node.position.z, c='b', s=10)
+        
     if parent_position is not None:
         ax.plot(
             [parent_position.x, node.position.x],

@@ -16,6 +16,20 @@ class Mesh:
         self.vertices = []  # list of vec3
         self.faces = []     # list of (i1, i2, i3)
 
+
+def export_meshes_to_obj(path: str, mesh_list: list[tuple[str, Mesh]]):
+    with open(path, "w") as f:
+        vert_offset = 0
+        for name, mesh in mesh_list:
+            for v in mesh.vertices:
+                f.write(f"v {v.x} {v.y} {v.z}\n")
+            f.write(f"g {name}\n")
+            for face in mesh.faces:
+                a, b, c = [idx + vert_offset + 1 for idx in face]
+                f.write(f"f {a} {b} {c}\n")
+            vert_offset += len(mesh.vertices)
+
+
 def export_mesh_to_obj(filename, vertices, faces):
     """
     Exports mesh data to a simple OBJ file.

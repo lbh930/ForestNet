@@ -4,13 +4,14 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+
 from tools.common import process_config, vec3
-from tools.gen_mesh import Mesh, export_mesh_to_obj, generate_tree_mesh
+from tools.gen_mesh import Mesh, generate_tree_mesh, export_meshes_to_obj
 from tools.gen_nodes import TreeNode, gen_tree
 
 
-def _draw_circle_at_node(ax, node: TreeNode, circle_points=32):
-    """Draw a circular cross-section of the node."""
+def _draw_circle_at_node(ax, node: TreeNode, circle_points: int = 32):
+    """Draw a circular cross‑section of the node."""
     d = node.direction
     if d.length() < 1e-6:
         d = vec3(0, 0, 1)
@@ -26,7 +27,7 @@ def _draw_circle_at_node(ax, node: TreeNode, circle_points=32):
     e1 = e1.normalized()
     e2 = d.cross(e1).normalized()
 
-    theta = np.linspace(0, 2 * np.pi, circle_points)
+    theta = np.linspace(0, 2 * math.pi, circle_points)
     X, Y, Z = [], [], []
     r = node.radius
     c = node.position
@@ -38,19 +39,17 @@ def _draw_circle_at_node(ax, node: TreeNode, circle_points=32):
     X.append(X[0])
     Y.append(Y[0])
     Z.append(Z[0])
-    ax.plot(X, Y, Z, color='r', linewidth=0.8)
+    ax.plot(X, Y, Z, color="r", linewidth=0.8)
 
 
 def visualize_tree(node: TreeNode, ax, parent_pos=None):
     """Recursively visualize the tree."""
-    ax.scatter(node.position.x, node.position.y, node.position.z, c='g', s=10)
-    if parent_pos:
-        ax.plot(
-            [parent_pos.x, node.position.x],
-            [parent_pos.y, node.position.y],
-            [parent_pos.z, node.position.z],
-            'k-', linewidth=0.5
-        )
+    if node.is_main:
+        ax.scatter(node.position.x, node.position.y, node.position.z, c="g", s=10)
+    else:
+        ax.scatter(node.position.x, node.position.y, node.position.z, c="b", s=10)
+    if parent_pos is not None:
+        ax.plot([parent_pos.x, node.position.x], [parent_pos.y, node.position.y], [parent_pos.z, node.position.z], "k-", linewidth=0.5)
     _draw_circle_at_node(ax, node)
     for child in node.children:
         visualize_tree(child, ax, node.position)
@@ -74,19 +73,15 @@ def _accumulate_limits(node: TreeNode, limits_dict):
 
 def run_forest_simulation(forest_config):
     """Generate a forest of trees based on the given config."""
-    # Process tree config
     tree_config = forest_config.get("tree_config", {})
-
-    # Read forest params
     width = forest_config.get("width")
     length = forest_config.get("length")
     tree_count = forest_config.get("tree_count")
     minimal_distance = forest_config.get("minimal_distance")
-    
-    print ("generating forest with config:")
-    print (forest_config)
 
-    # Decide how to set tree height
+    print("generating forest with config:")
+    print(forest_config)
+
     use_random_height = "average_height" in forest_config
     if use_random_height:
         avg_height = forest_config["average_height"]
@@ -94,13 +89,12 @@ def run_forest_simulation(forest_config):
     else:
         default_height = tree_config.get("Height", 10.0)
 
-    # Try placing trees so they respect minimal distance
     positions = []
     max_tries = tree_count * 10
     attempts = 0
-    
-    print ("---starting generation---")
-    
+
+    print("---starting generation---")
+
     while len(positions) < tree_count and attempts < max_tries:
         attempts += 1
         x = random.uniform(0, width)
@@ -112,40 +106,28 @@ def run_forest_simulation(forest_config):
 
     print(f"Actually placed {len(positions)} trees (requested {tree_count}).")
 
-    # Set up figure
-    #fig = plt.figure(figsize=(10, 8))
-    #ax = fig.add_subplot(111, projection='3d')
-    #ax.set_title("3D Forest Visualization")
-    #ax.set_xlabel("X")
-    #ax.set_ylabel("Y")
-    #ax.set_zlabel("Z")
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.set_title("3D Forest Visualization")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
 
-    # Collect axis limits
     limits = {"x": [], "y": [], "z": []}
-
-    # Combine meshes
-    forest_mesh = Mesh()
-    
+    tree_meshes: list[tuple[str, Mesh]] = []
     tree_gen_count = 0
 
-    for pos in positions:
-        # Pick a tree height
+    for i, pos in enumerate(positions):
         if use_random_height:
             h = max(0.5, random.gauss(avg_height, var_height))
         else:
             h = default_height
-            
-        cur_tree_config = tree_config.copy()
 
-        # Update config with current height
+        cur_tree_config = tree_config.copy()
         cur_tree_config["Height"] = h
-        
-        # Process the tree config with new height
         cur_tree_config = process_config(cur_tree_config)
 
-        # Gather other params
-        starting_radius = cur_tree_config.get("DBH", 0.5)/2
-
+        starting_radius = cur_tree_config.get("DBH", 0.5) / 2
         max_levels = cur_tree_config.get("maximum_levels", 4)
         angle_limit = cur_tree_config.get("Branching_Angle_Range:", (15, 45))
         up_straight = cur_tree_config.get("Up_Straightness", 0.6)
@@ -154,10 +136,11 @@ def run_forest_simulation(forest_config):
         curve_range = cur_tree_config.get("Curvature_Range", (0.0, 0.25))
         rad_coeff = cur_tree_config.get("Radius_Coefficient", 0.5)
         len_coeff = cur_tree_config.get("Length_Coefficient", 0.33)
-        
+        sympodial_chance = cur_tree_config.get("Sympodial_Chance", 0.3)
+        side_branch_decay = cur_tree_config.get("Side_Branch_Decay", 1.2)
+
         tree_gen_count += 1
 
-        # Generate a tree
         tree = gen_tree(
             starting_radius=starting_radius,
             starting_direction=vec3(0, 0, 1),
@@ -169,38 +152,29 @@ def run_forest_simulation(forest_config):
             curvature_range=curve_range,
             up_straightness=up_straight,
             radius_coefficient=rad_coeff,
-            length_coefficient=len_coeff
+            length_coefficient=len_coeff,
+            sympodial_chance=sympodial_chance,
+            max_tree_height=h,
+            side_branch_decay=side_branch_decay,
         )
-            
-        print ("generated tree with height ", h, " and starting radius ", starting_radius)
 
-        # Offset tree
+        print("generated tree with height ", h, " and starting radius ", starting_radius)
+
         _offset_tree_positions(tree, pos)
-
-        # # The `visualize_tree` function is recursively visualizing a tree structure in a 3D plot.
-        # Here's a breakdown of what it does:
-        
-        #visualize_tree(tree, ax)
         _accumulate_limits(tree, limits)
 
-        # Generate mesh for this tree
         tree_mesh = generate_tree_mesh(tree, radial_segments=16)
-        
-        print ("built mesh with ", len(tree_mesh.vertices), " vertices and ", len(tree_mesh.faces), " faces")
 
-        # Merge meshes
-        base_vert_count = len(forest_mesh.vertices)
-        forest_mesh.vertices.extend(tree_mesh.vertices)
-        for face in tree_mesh.faces:
-            forest_mesh.faces.append([idx + base_vert_count for idx in face])
-            
+        print("built mesh with ", len(tree_mesh.vertices), " vertices and ", len(tree_mesh.faces), " faces")
+
+        tree_meshes.append((f"tree_{i:04d}", tree_mesh))
+
         if tree_gen_count % 5 == 0:
-            print ("generated ", tree_gen_count, "trees")
-            
-    print ("generated ", tree_gen_count, " trees")
+            print("generated ", tree_gen_count, "trees")
 
-    # Set axis limits
-    if limits["x"] and limits["y"] and limits["z"]:
+    print("generated total of ", tree_gen_count, " trees")
+
+    if limits["x"]:
         x_min, x_max = min(limits["x"]), max(limits["x"])
         y_min, y_max = min(limits["y"]), max(limits["y"])
         z_min, z_max = min(limits["z"]), max(limits["z"])
@@ -208,29 +182,26 @@ def run_forest_simulation(forest_config):
         x_mid = (x_max + x_min) / 2
         y_mid = (y_max + y_min) / 2
         z_mid = (z_max + z_min) / 2
+        ax.set_xlim(x_mid - max_range / 2, x_mid + max_range / 2)
+        ax.set_ylim(y_mid - max_range / 2, y_mid + max_range / 2)
+        ax.set_zlim(z_mid - max_range / 2, z_mid + max_range / 2)
 
-        #ax.set_xlim(x_mid - max_range / 2, x_mid + max_range / 2)
-        #ax.set_ylim(y_mid - max_range / 2, y_mid + max_range / 2)
-        #ax.set_zlim(z_mid - max_range / 2, z_mid + max_range / 2)
+    total_vertices = sum(len(m.vertices) for _, m in tree_meshes)
+    total_faces = sum(len(m.faces) for _, m in tree_meshes)
+    print(f"Forest mesh has {total_vertices} vertices and {total_faces} faces.")
 
-    #plt.show()
-    
-    # Print output mesh dimensions
-    print(f"Forest mesh has {len(forest_mesh.vertices)} vertices and {len(forest_mesh.faces)} faces.")
-    # Print bounding box
     x_min, x_max = min(limits["x"]), max(limits["x"])
     y_min, y_max = min(limits["y"]), max(limits["y"])
     z_min, z_max = min(limits["z"]), max(limits["z"])
     print(f"Bounding box: x({x_min}, {x_max}), y({y_min}, {y_max}), z({z_min}, {z_max})")
 
-    print ("---exporting obj file---")
-    # Export the forest mesh
-    export_mesh_to_obj("test_forest.obj", forest_mesh.vertices, forest_mesh.faces)
+    print("---exporting obj file---")
+    export_meshes_to_obj("test_forest.obj", tree_meshes)
     print("Forest mesh exported to 'test_forest.obj'.")
 
 
 def main():
-    from presets.forests import L1W_forest_config, broadleaf_forest_config
+    from presets.forests import L1W_forest_config
     run_forest_simulation(L1W_forest_config)
 
 

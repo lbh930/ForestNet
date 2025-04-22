@@ -16,12 +16,13 @@ class TreeNode:
       - level (int): The hierarchical level (depth) of the node.
       - children: A list of child TreeNode instances.
     """
-    def __init__(self, is_root, position, direction, radius, level):
+    def __init__(self, is_root, position, direction, radius, level, is_main):
         self.is_root = is_root
         self.position = position
         self.direction = direction
         self.radius = radius
         self.level = level
+        self.is_main = is_main
         self.children = []
 
     def add_child(self, child):
@@ -115,7 +116,7 @@ def _random_curvature_dir(base_dir: vec3, curvature_range: tuple) -> vec3:
     return new_dir
 
 
-def _dynamic_branch_probability(depth: int, max_depth: int, base_probability: float) -> float:
+def _dynamic_branch_probability(depth: int, max_depth: int, height: int, max_height: int, base_probability: float) -> float:
     """
     Compute the branching probability based on the current depth and a baseline probability.
     
@@ -124,13 +125,23 @@ def _dynamic_branch_probability(depth: int, max_depth: int, base_probability: fl
     :param base_probability: The base branching probability.
     :return: Adjusted branching probability.
     """
-    depth_factor = (1.0 - depth / max_depth)
-    return max(0.0, base_probability * depth_factor)
+    # depth factor: high at root, decays with depth
+    depth_ratio = depth / max_depth if max_depth > 0 else 1.0
+    depth_factor = max(0.0, 1.0 - depth_ratio**2)
+
+    # height factor: peak at 0.6 * max_height, zero at top/bottom extremes
+    height_frac = height / max_height if max_height > 0 else 1.0
+    height_factor = max(0.0, 1.0 - (abs(height_frac - 0.67) ** 2))
+
+    # combined probability, clamped to [0, 1]
+    prob = base_probability * depth_factor * height_factor
+    return min(max(prob, 0.0), 1.0)
 
 
 def _generate_branch_stepwise_allometric(
     parent_node: TreeNode,
     total_length: float,
+    bound_length: float,         # New param: maximum length allowed for this branch
     step_size: float,
     max_depth: int,
     base_branching_probability: float,
@@ -142,41 +153,29 @@ def _generate_branch_stepwise_allometric(
     length_coefficient: float,   # Exponent for branch length scaling (default 0.33)
     sympodial_chance: float,      # New param: chance for sympodial switch
     max_tree_height: float,       # New param: maximum allowed tree height
-    side_branch_decay: float      # New param: side branch decay factor
+    side_branch_decay: float,     # New param: factor to bound side branch length (i.e. parent's bound / decay)
+    is_main_branch: bool = True,   # New param: whether current branch is main branch
+    distance_covered: float = 0.0
 ):
     """
     Generate trunk or branch segments in a stepwise manner while applying allometric rules.
-    
-    Original comments retained.
-    # Added sympodial_chance to enable sympodial-like splitting.
-    # New max_tree_height bounds the tree's vertical growth.
-    # Added side_branch_decay to accelerate side branch length attenuation.
-    
-    Changes:
-      - For the main trunk, we estimate a final radius using a power law based on max_depth.
-      - For side branches, compute:
-            child branch radius = parent's radius × ( (branch_count+1)^(–radius_coefficient) )
-            side branch length = total_length × ( (branch_count+1)^(–length_coefficient) ) / side_branch_decay
-        where branch_count is the number of side branches generated.
-      - Implement sympodial switch: sometimes the main trunk is replaced by one of its side branches.
-      - Growth stops if maximum height is reached.
     """
     start_radius = parent_node.radius
-    distance_covered = 0.0
 
-    # Estimate final radius at the tip of the branch using the power law.
-    final_radius = start_radius * (max_depth ** (-radius_coefficient))
+    # Estimate final radius at the tip of the branch
+    final_radius = start_radius * 0.05
+    #final_radius = start_radius * (max_depth ** (-radius_coefficient))
 
     side_branches = []  # collect side branches for possible sympodial switch
 
-    # While loop also checks that tree height is bounded.
-    while distance_covered < total_length and parent_node.radius > min_radius and parent_node.position.z < max_tree_height:
+    # Use bound_length instead of total_length for stopping condition.
+    while distance_covered < bound_length and parent_node.position.z < max_tree_height:
         distance_covered += step_size
-        if distance_covered > total_length:
-            distance_covered = total_length
+        if distance_covered > bound_length:
+            distance_covered = bound_length
 
-        # Compute fraction of the total branch length covered.
-        frac = distance_covered / total_length
+        # Compute fraction of the branch length covered (bounded).
+        frac = distance_covered / bound_length
         # Linearly interpolate between the start and estimated final radius.
         current_radius = start_radius * (1 - frac) + final_radius * frac
         if current_radius < min_radius:
@@ -200,24 +199,41 @@ def _generate_branch_stepwise_allometric(
             position=new_position,
             direction=new_direction,
             radius=current_radius,
-            level=parent_node.level
+            level=parent_node.level,
+            is_main=is_main_branch
         )
         parent_node.add_child(child_node)
-        # Continue along the main branch by default.
-        main_continuation = child_node
+        
+        parent_node = child_node
 
         # Compute dynamic branching probability based on current depth.
-        branching_probability = _dynamic_branch_probability(parent_node.level, max_depth, base_branching_probability)
-
+        branching_probability = _dynamic_branch_probability(parent_node.level, max_depth, distance_covered, total_length, base_branching_probability)
+        
+        # Attempt sympodial switch only if current branch is main.
+        main_continuation_idx = -1
+        if is_main_branch and side_branches and random.random() < sympodial_chance:
+            # My comment: switch main branch to a randomly chosen side branch.
+            main_continuation_idx = random.randint(0, branch_count-1)
+        
         # Attempt to generate side branches.
-        if random.random() < branching_probability and current_radius > min_radius:
-            branch_count = random.randint(1, 3)  # Randomly choose the number of side branches.
-
-            for _ in range(branch_count):
-                # Calculate child branch radius using power-law scaling:
-                # child_radius = parent's radius × ((branch_count+1)^(–radius_coefficient))
-                child_r = parent_node.radius * ((branch_count + 1) ** (-radius_coefficient))
-                child_r *= random.uniform(0.9, 1.1)  # slight random variation.
+        # If at final node of current branch, enforce branching
+        can_branch = random.random() < branching_probability or distance_covered + step_size >= bound_length
+        if can_branch and distance_covered > 0.2*total_length:
+            if main_continuation_idx != -1: #sympodial switch happended
+                branch_count = random.randint(2, 3)  # Randomly choose number of side branches.
+            else:
+                branch_count = random.randint(1, 3)  # Randomly choose number of side branches.
+            
+            for idx in range(branch_count):
+                # Calculate child branch radius using power-law scaling,
+                # with decay factor always applied on side branches
+                
+                if main_continuation_idx != idx:
+                    child_r = parent_node.radius * ((branch_count) ** (-radius_coefficient)) / side_branch_decay
+                else:
+                    child_r = parent_node.radius * ((branch_count) ** (-radius_coefficient))
+                    
+                child_r *= random.uniform(0.9, 1.1)  # Add slight random variation.
                 if child_r < min_radius:
                     child_r = min_radius
 
@@ -230,21 +246,27 @@ def _generate_branch_stepwise_allometric(
                     position=parent_node.position + parent_node.direction.normalized() * random.uniform(0, step_size),
                     direction=branch_dir,
                     radius=child_r,
-                    level=parent_node.level + 1
+                    level=parent_node.level + 1,
+                    is_main=(main_continuation_idx == idx)
                 )
                 parent_node.add_child(branch_node)
                 side_branches.append(branch_node)
 
-                # Compute side branch length with extra decay factor:
-                sub_branch_length = total_length * ((branch_count + 1) ** (-length_coefficient)) / side_branch_decay
-
+                # Compute side branch maximum length as parent's bound length divided by side_branch_decay,
+                # optionally scaled by branch_count factor if needed.
+                
+                if main_continuation_idx != idx:
+                    sub_branch_length = bound_length / side_branch_decay
+                else:
+                    sub_branch_length = bound_length
                 # Recursively generate the side branch.
                 _generate_branch_stepwise_allometric(
                     parent_node=branch_node,
-                    total_length=sub_branch_length,
+                    total_length=total_length,  # total_length is kept for scaling but not used in stopping.
+                    bound_length=sub_branch_length,
                     step_size=step_size,
                     max_depth=max_depth,
-                    base_branching_probability=base_branching_probability * 0.8,  # reduced probability for side branches
+                    base_branching_probability=base_branching_probability * 0.8,  # reduced probability for side branches.
                     curvature_range=curvature_range,
                     up_straightness=up_straightness * random.uniform(0.6, 0.9),
                     min_radius=min_radius,
@@ -253,19 +275,13 @@ def _generate_branch_stepwise_allometric(
                     length_coefficient=length_coefficient,
                     sympodial_chance=sympodial_chance,
                     max_tree_height=max_tree_height,
-                    side_branch_decay=side_branch_decay
+                    side_branch_decay=side_branch_decay,
+                    is_main_branch=(idx == main_continuation_idx),  # Side branches are never main.
+                    distance_covered = distance_covered
                 )
-        
-        # Attempt sympodial switch: if any side branch exists and chance condition is met,
-        # switch main trunk to one of the side branches.
-        if side_branches and random.random() < sympodial_chance:
-            # New comment: switch main branch to a randomly chosen side branch.
-            main_continuation = random.choice(side_branches)
-            break  # stop current trunk; sympodial branch takes over
-
-        # Continue along the main branch normally.
-        parent_node = main_continuation
-
+            
+            if main_continuation_idx != -1: # if sympodial branching happened
+                break #end original main branch
 
 def gen_tree(
     starting_radius: float,
@@ -317,13 +333,15 @@ def gen_tree(
         position=vec3(0, 0, 0),
         direction=starting_direction.normalized(),
         radius=starting_radius,
-        level=0
+        level=0,
+        is_main = True
     )
 
     # Generate the main trunk and subsequent branches.
     _generate_branch_stepwise_allometric(
         parent_node=root,
         total_length=total_length,
+        bound_length=total_length,
         step_size=step_size,
         max_depth=maximum_levels,
         base_branching_probability=base_branching_probability,

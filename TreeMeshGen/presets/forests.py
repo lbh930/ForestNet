@@ -17,6 +17,16 @@ L1W_forest_config = {
     "length": 103, #in meters, range on y axis
     "average_height": 25,
     "variance_height": 6.5, #height randomized based on normal distribution"
-    "tree_count": 50,
+    "tree_count": 156,
+    "minimal_distance": 4.5, # minimal distance between distinct trees.
+}
+
+test_forest_config = { 
+    "tree_config": broadleaf_config,
+    "width": 50, #in meters, range on x axis
+    "length": 50, #in meters, range on y axis
+    "average_height": 25,
+    "variance_height": 6.5, #height randomized based on normal distribution"
+    "tree_count": 16,
     "minimal_distance": 4.5, # minimal distance between distinct trees.
 }

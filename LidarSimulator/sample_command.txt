@@ -1,0 +1,1 @@
+python lidar_sim.py test_forest.obj --spacing 0.5 --height 5.0 --out forest_scan.las

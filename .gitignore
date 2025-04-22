@@ -10,3 +10,7 @@ TreeMeshGen/tools/__pycache__/*
 TreeMeshGen/presets/__pycache__/*
 *.png
 *.obj
+*.pyc
+*.las
+*.laz
+*.obj
