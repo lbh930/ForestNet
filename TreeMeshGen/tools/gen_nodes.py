@@ -211,7 +211,8 @@ def _generate_branch_stepwise_allometric(
         
         # Attempt sympodial switch only if current branch is main.
         main_continuation_idx = -1
-        if is_main_branch and side_branches and random.random() < sympodial_chance:
+        # Change: Sympodial branching can happen on any branch, not just main.
+        if '''is_main_branch''' and side_branches and random.random() < sympodial_chance:
             # My comment: switch main branch to a randomly chosen side branch.
             main_continuation_idx = random.randint(0, branch_count-1)
         
@@ -233,6 +234,14 @@ def _generate_branch_stepwise_allometric(
                 else:
                     child_r = parent_node.radius * ((branch_count) ** (-radius_coefficient))
                     
+                # Compute side branch maximum length as parent's bound length divided by side_branch_decay,
+                # optionally scaled by branch_count factor if needed.
+                
+                if main_continuation_idx != idx:
+                    sub_branch_length = bound_length / (side_branch_decay**2)
+                else:
+                    sub_branch_length = bound_length
+                    
                 child_r *= random.uniform(0.9, 1.1)  # Add slight random variation.
                 if child_r < min_radius:
                     child_r = min_radius
@@ -247,18 +256,11 @@ def _generate_branch_stepwise_allometric(
                     direction=branch_dir,
                     radius=child_r,
                     level=parent_node.level + 1,
-                    is_main=(main_continuation_idx == idx)
+                    is_main=(main_continuation_idx == idx and is_main_branch)  # Only the main continuation is marked as main.
                 )
                 parent_node.add_child(branch_node)
                 side_branches.append(branch_node)
 
-                # Compute side branch maximum length as parent's bound length divided by side_branch_decay,
-                # optionally scaled by branch_count factor if needed.
-                
-                if main_continuation_idx != idx:
-                    sub_branch_length = bound_length / side_branch_decay
-                else:
-                    sub_branch_length = bound_length
                 # Recursively generate the side branch.
                 _generate_branch_stepwise_allometric(
                     parent_node=branch_node,
@@ -276,7 +278,7 @@ def _generate_branch_stepwise_allometric(
                     sympodial_chance=sympodial_chance,
                     max_tree_height=max_tree_height,
                     side_branch_decay=side_branch_decay,
-                    is_main_branch=(idx == main_continuation_idx),  # Side branches are never main.
+                    is_main_branch=(idx == main_continuation_idx and is_main_branch),  # Side branches are never main.
                     distance_covered = distance_covered
                 )
             

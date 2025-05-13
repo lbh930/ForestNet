@@ -2,6 +2,7 @@ import math
 import argparse
 import numpy as np
 import trimesh
+import random
 
 try:
     # Prefer Embree if available (fast)
@@ -76,7 +77,7 @@ def _parse_face_groups(obj_path: str):
         for line in fh:
             if line.startswith("g "):
                 name = line[2:].strip()
-                # 为新的 g 组分配 ID
+                # assign a new ID to the group name
                 current_id = id_by_name.setdefault(name, len(id_by_name))
             elif line.startswith("f "):
                 mapping.append(current_id)
@@ -101,32 +102,37 @@ def load_mesh_with_labels(obj_path: str):
     return mesh, face_to_tree
 
 # grid origins -----------------------------------------------------------------
-
 def generate_origins(bounds, spacing, height_offset):
-    """Create a XY grid of scanner positions."""
+    """Create an XY grid of scanner positions *inside* the mesh bounds."""
     (xmin, ymin, _), (xmax, ymax, zmax) = bounds
     z_scan = zmax + height_offset
-    x_start = math.floor(xmin / spacing) * spacing - spacing
-    x_end = math.ceil(xmax / spacing) * spacing + spacing
-    y_start = math.floor(ymin / spacing) * spacing - spacing
-    y_end = math.ceil(ymax / spacing) * spacing + spacing
-    xs = np.arange(x_start, x_end + spacing * 0.5, spacing, dtype=np.float32)
-    ys = np.arange(y_start, y_end + spacing * 0.5, spacing, dtype=np.float32)
+    # first/last grid lines that stay inside the bounds
+    x_start = math.ceil(xmin / spacing) * spacing          # >= xmin
+    x_end   = math.floor(xmax / spacing) * spacing         # <= xmax
+    y_start = math.ceil(ymin / spacing) * spacing          # >= ymin
+    y_end   = math.floor(ymax / spacing) * spacing         # <= ymax
+    # build grid
+    xs = np.arange(x_start, x_end + 1e-6, spacing, dtype=np.float32)
+    ys = np.arange(y_start, y_end + 1e-6, spacing, dtype=np.float32)
     gx, gy = np.meshgrid(xs, ys, indexing="xy")
-    origins = np.stack([gx.ravel(), gy.ravel(), np.full(gx.size, z_scan, dtype=np.float32)], axis=1)
+    origins = np.stack([gx.ravel(),
+                        gy.ravel(),
+                        np.full(gx.size, z_scan, dtype=np.float32)], axis=1)
+    #print (origins)
     return origins, z_scan
+
 
 # main -------------------------------------------------------------------------
 
 def main():
     p = argparse.ArgumentParser(description="Airborne LiDAR simulator (multi‑ray)")
     p.add_argument("obj", help="input OBJ with per‑tree groups")
-    p.add_argument("--spacing", type=float, default=16.0, help="grid spacing (m)")
-    p.add_argument("--height", type=float, default=15.0, help="scan height above top (m)")
-    p.add_argument("--h_fov", type=float, default=77.2, help="horizontal FOV (deg)")
-    p.add_argument("--v_fov", type=float, default=77.2, help="vertical FOV (deg)")
-    p.add_argument("--h_steps", type=int, default=256, help="horizontal samples")
-    p.add_argument("--v_steps", type=int, default=256, help="vertical samples")
+    p.add_argument("--spacing", type=float, default=2, help="grid spacing (m)")
+    p.add_argument("--height", type=float, default=10.0, help="scan height above top (m)")
+    p.add_argument("--h_fov", type=float, default=70, help="horizontal FOV (deg)")
+    p.add_argument("--v_fov", type=float, default=70, help="vertical FOV (deg)")
+    p.add_argument("--h_steps", type=int, default=200, help="horizontal samples")
+    p.add_argument("--v_steps", type=int, default=150, help="vertical samples")
     p.add_argument("--out", default="sim_scan.las", help="output path")
     p.add_argument("--max_range", type=float, default=200.0, help="range filter (m)")
     args = p.parse_args()
@@ -177,9 +183,35 @@ def main():
 
         # filter + collect
         for loc, rid, tri in zip(locs, idx_ray, idx_tri):
-            if np.linalg.norm(loc - o_batch[rid]) <= args.max_range:
-                pts.append(loc)
-                tids.append(face_to_tree[tri])
+            dist = np.linalg.norm(loc - o_batch[rid])
+            if dist > args.max_range:
+                continue  # skip out-of-range returns
+            hit_prob = np.exp(-dist / 200.0)  # farther = less likely to hit
+            if random.random() > hit_prob:
+                continue  # simulate missed detection
+            std_err = 0.00013 * dist  # 2cm error @150m according to Zenmuse L2 spec
+            noise = np.random.normal(0, std_err, size=3)
+            beam_div_h = 0.0002  # 0.2 mrad horizontal according to Zenmuse L2 spec
+            beam_div_v = 0.0006  # 0.6 mrad vertical according to Zenmuse L2 spec
+            spot_size_h = dist * beam_div_h
+            spot_size_v = dist * beam_div_v
+            spot_noise = np.array([
+                np.random.normal(0, spot_size_h / 2),
+                np.random.normal(0, spot_size_v / 2),
+                0.0
+            ])
+            noisy_loc = loc + noise + spot_noise
+            
+            #print sample noise amount
+            #if random.random() < 0.0001:
+            #    #print total noise in cm
+            #    noise = np.linalg.norm(noise + spot_noise) * 100
+            #    print (f"Sample noise: {noise:.2f} cm")
+                
+            pts.append(noisy_loc)
+            tids.append(face_to_tree[tri])
+
+
 
         # print progress every 10 origins
         if (oi + 1) % 10 == 0:

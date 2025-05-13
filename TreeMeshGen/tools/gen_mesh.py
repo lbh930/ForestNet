@@ -1,6 +1,7 @@
 # mesh_gen.py
 
 import math
+import random
 
 from tools.common import vec3
 
@@ -68,28 +69,42 @@ def _build_local_frame(direction: vec3):
     side1 = forward.cross(up_candidate).normalized()
     side2 = forward.cross(side1).normalized()
     return forward, side1, side2
+import random, math
+# …
 
-def _create_ring(mesh: Mesh, node, radial_segments=8):
+
+def _create_ring(mesh: Mesh, node, radial_segments=8,
+                 noise_amp=0.13,  # per-vertex radial jitter fraction
+                 axial_amp=0.08,  # per-vertex axial jitter fraction
+                 rng: random.Random | None = None):
     """
-    Creates a circular ring around the node's position, 
-    oriented perpendicular to the node's direction, 
-    and with the node's radius.
-    
-    Returns a list of vertex indices corresponding to the ring.
+    Creates a ring with per-vertex noise, giving bark a rough feel.
+    noise_amp : ±fraction of node.radius for radial noise
+    axial_amp : ±fraction of node.radius for small z-jitter
     """
+    if rng is None:
+        rng = random
+
     forward, side1, side2 = _build_local_frame(node.direction)
     ring_indices = []
 
     for i in range(radial_segments):
         angle = 2.0 * math.pi * i / radial_segments
-        x = math.cos(angle) * node.radius
-        y = math.sin(angle) * node.radius
-        # Position on the ring
-        pos = node.position + side1 * x + side2 * y
+
+        # independent radial noise
+        r_local = node.radius * (1.0 + rng.uniform(-noise_amp, noise_amp))
+        x = math.cos(angle) * r_local
+        y = math.sin(angle) * r_local
+
+        # small axial (along trunk)
+        z_offset = rng.uniform(-axial_amp, axial_amp) * node.radius
+        pos = node.position + side1 * x + side2 * y + forward * z_offset
+
         mesh.vertices.append(pos)
         ring_indices.append(len(mesh.vertices) - 1)
 
     return ring_indices
+
 
 def _connect_rings(mesh: Mesh, ringA, ringB):
     """
