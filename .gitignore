@@ -13,4 +13,4 @@ TreeMeshGen/presets/__pycache__/*
 *.pyc
 *.las
 *.laz
-*.obj
+*.objData/*.pth

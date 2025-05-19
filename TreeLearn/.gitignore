@@ -61,5 +61,4 @@ data
 *.tsv
 *.npy
 *.zip
-*.pth
 *.pt
