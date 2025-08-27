@@ -1,0 +1,307 @@
+{
+  "plane": {
+    "a": 0.00016192808619808305,
+    "b": -0.00180759607420154,
+    "c": 0.9999983531865079,
+    "d": 7772.001958617568
+  },
+  "grid_meta": {
+    "xmin": 394968.1583,
+    "xmax": 395041.0682,
+    "ymin": 4437848.0881,
+    "ymax": 4437881.0944,
+    "cell": 0.5,
+    "nx": 146,
+    "ny": 67
+  },
+  "kde_meta": {
+    "xmin": 394968.1583,
+    "xmax": 395041.0682,
+    "ymin": 4437848.0881,
+    "ymax": 4437881.0944,
+    "cell": 0.25,
+    "nx": 292,
+    "ny": 133
+  },
+  "rows": [
+    {
+      "row_index": 0,
+      "row_length_m": 60.02162429896454,
+      "plants_count": 68,
+      "linear_density_stems_per_m": 1.1329250215105076
+    },
+    {
+      "row_index": 1,
+      "row_length_m": 70.79831267021393,
+      "plants_count": 78,
+      "linear_density_stems_per_m": 1.101721171849565
+    },
+    {
+      "row_index": 2,
+      "row_length_m": 69.11438321587178,
+      "plants_count": 46,
+      "linear_density_stems_per_m": 0.665563343831394
+    },
+    {
+      "row_index": 3,
+      "row_length_m": 71.36499813962878,
+      "plants_count": 83,
+      "linear_density_stems_per_m": 1.1630351315585663
+    },
+    {
+      "row_index": 4,
+      "row_length_m": 34.328272390197604,
+      "plants_count": 32,
+      "linear_density_stems_per_m": 0.9321762434260327
+    },
+    {
+      "row_index": 5,
+      "row_length_m": 71.0408627941269,
+      "plants_count": 80,
+      "linear_density_stems_per_m": 1.1261124492791743
+    },
+    {
+      "row_index": 6,
+      "row_length_m": 69.60271658042538,
+      "plants_count": 80,
+      "linear_density_stems_per_m": 1.1493804255119935
+    },
+    {
+      "row_index": 7,
+      "row_length_m": 71.34245630186288,
+      "plants_count": 78,
+      "linear_density_stems_per_m": 1.0933181171947297
+    },
+    {
+      "row_index": 8,
+      "row_length_m": 13.963677948743475,
+      "plants_count": 16,
+      "linear_density_stems_per_m": 1.14582992093711
+    },
+    {
+      "row_index": 9,
+      "row_length_m": 67.9873794495842,
+      "plants_count": 64,
+      "linear_density_stems_per_m": 0.9413511819125044
+    },
+    {
+      "row_index": 10,
+      "row_length_m": 16.633534142038684,
+      "plants_count": 16,
+      "linear_density_stems_per_m": 0.9619122348486648
+    },
+    {
+      "row_index": 11,
+      "row_length_m": 51.68190397716384,
+      "plants_count": 59,
+      "linear_density_stems_per_m": 1.1415988084740403
+    },
+    {
+      "row_index": 12,
+      "row_length_m": 71.16485802783298,
+      "plants_count": 79,
+      "linear_density_stems_per_m": 1.110098469796745
+    },
+    {
+      "row_index": 13,
+      "row_length_m": 72.64202003703393,
+      "plants_count": 82,
+      "linear_density_stems_per_m": 1.1288232342409426
+    },
+    {
+      "row_index": 14,
+      "row_length_m": 71.8647822549654,
+      "plants_count": 73,
+      "linear_density_stems_per_m": 1.0157965794846078
+    },
+    {
+      "row_index": 15,
+      "row_length_m": 40.075326549991,
+      "plants_count": 48,
+      "linear_density_stems_per_m": 1.1977444510682542
+    },
+    {
+      "row_index": 16,
+      "row_length_m": 68.44753005926356,
+      "plants_count": 78,
+      "linear_density_stems_per_m": 1.1395590159712947
+    },
+    {
+      "row_index": 17,
+      "row_length_m": 71.81624213990801,
+      "plants_count": 79,
+      "linear_density_stems_per_m": 1.1000297097987533
+    },
+    {
+      "row_index": 18,
+      "row_length_m": 23.038320189958846,
+      "plants_count": 23,
+      "linear_density_stems_per_m": 0.9983366760404889
+    },
+    {
+      "row_index": 19,
+      "row_length_m": 69.03222709145288,
+      "plants_count": 53,
+      "linear_density_stems_per_m": 0.7677573538194904
+    },
+    {
+      "row_index": 20,
+      "row_length_m": 42.97357334223795,
+      "plants_count": 53,
+      "linear_density_stems_per_m": 1.2333161028502895
+    },
+    {
+      "row_index": 21,
+      "row_length_m": 39.339035746454286,
+      "plants_count": 39,
+      "linear_density_stems_per_m": 0.9913816965764128
+    },
+    {
+      "row_index": 22,
+      "row_length_m": 71.10556501179303,
+      "plants_count": 81,
+      "linear_density_stems_per_m": 1.1391513447163517
+    },
+    {
+      "row_index": 23,
+      "row_length_m": 71.36091856995101,
+      "plants_count": 83,
+      "linear_density_stems_per_m": 1.1631016200925142
+    },
+    {
+      "row_index": 24,
+      "row_length_m": 71.88968965263982,
+      "plants_count": 74,
+      "linear_density_stems_per_m": 1.0293548401385078
+    },
+    {
+      "row_index": 25,
+      "row_length_m": 68.83171445403612,
+      "plants_count": 62,
+      "linear_density_stems_per_m": 0.9007475767787515
+    },
+    {
+      "row_index": 26,
+      "row_length_m": 68.04280971671896,
+      "plants_count": 75,
+      "linear_density_stems_per_m": 1.1022472515794945
+    },
+    {
+      "row_index": 27,
+      "row_length_m": 71.48033710463329,
+      "plants_count": 80,
+      "linear_density_stems_per_m": 1.1191889020178456
+    },
+    {
+      "row_index": 28,
+      "row_length_m": 71.62330075029305,
+      "plants_count": 85,
+      "linear_density_stems_per_m": 1.1867646298003407
+    },
+    {
+      "row_index": 29,
+      "row_length_m": 72.24923513763808,
+      "plants_count": 80,
+      "linear_density_stems_per_m": 1.1072781579984392
+    },
+    {
+      "row_index": 30,
+      "row_length_m": 55.97888633302824,
+      "plants_count": 59,
+      "linear_density_stems_per_m": 1.0539688061852217
+    },
+    {
+      "row_index": 31,
+      "row_length_m": 63.7978625183772,
+      "plants_count": 79,
+      "linear_density_stems_per_m": 1.2382860002126839
+    },
+    {
+      "row_index": 32,
+      "row_length_m": 72.0996721373935,
+      "plants_count": 76,
+      "linear_density_stems_per_m": 1.0540963328539694
+    },
+    {
+      "row_index": 33,
+      "row_length_m": 9.27301787897349,
+      "plants_count": 7,
+      "linear_density_stems_per_m": 0.7548783029818648
+    },
+    {
+      "row_index": 34,
+      "row_length_m": 70.40986377871374,
+      "plants_count": 87,
+      "linear_density_stems_per_m": 1.2356223308913967
+    },
+    {
+      "row_index": 35,
+      "row_length_m": 67.93801369798888,
+      "plants_count": 47,
+      "linear_density_stems_per_m": 0.6918070965238023
+    },
+    {
+      "row_index": 36,
+      "row_length_m": 32.820327573303416,
+      "plants_count": 21,
+      "linear_density_stems_per_m": 0.6398473614590532
+    },
+    {
+      "row_index": 37,
+      "row_length_m": 38.43803652864808,
+      "plants_count": 47,
+      "linear_density_stems_per_m": 1.22274715996408
+    },
+    {
+      "row_index": 38,
+      "row_length_m": 71.78242643641279,
+      "plants_count": 78,
+      "linear_density_stems_per_m": 1.0866169321971157
+    },
+    {
+      "row_index": 39,
+      "row_length_m": 71.24855101317159,
+      "plants_count": 86,
+      "linear_density_stems_per_m": 1.2070420910609303
+    },
+    {
+      "row_index": 40,
+      "row_length_m": 71.29030763669019,
+      "plants_count": 83,
+      "linear_density_stems_per_m": 1.1642536377172725
+    },
+    {
+      "row_index": 41,
+      "row_length_m": 71.45800682305152,
+      "plants_count": 82,
+      "linear_density_stems_per_m": 1.1475271092160908
+    },
+    {
+      "row_index": 42,
+      "row_length_m": 28.568938680028268,
+      "plants_count": 37,
+      "linear_density_stems_per_m": 1.2951128641634015
+    },
+    {
+      "row_index": 43,
+      "row_length_m": 72.3206183761146,
+      "plants_count": 84,
+      "linear_density_stems_per_m": 1.161494493356583
+    },
+    {
+      "row_index": 44,
+      "row_length_m": 68.35667498829534,
+      "plants_count": 53,
+      "linear_density_stems_per_m": 0.7753449097557064
+    },
+    {
+      "row_index": 45,
+      "row_length_m": 46.997220759755685,
+      "plants_count": 54,
+      "linear_density_stems_per_m": 1.1490041140100966
+    }
+  ],
+  "avg_linear_density_stems_per_m": 1.062244591427241,
+  "avg_density_plants_per_m2": 1.416326121902988,
+  "row_spacing_m": 0.75
+}

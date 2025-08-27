@@ -1,0 +1,15 @@
+name: corn-density-env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - open3d
+  - laspy
+  - pip:
+      - laspy[lazrs,laszip]
