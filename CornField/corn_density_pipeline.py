@@ -1,497 +1,590 @@
 # corn_density_pipeline.py
-# Goal: decoupled steps with short English comments + per-step visualizations.
+# Goal: minimal pipeline using height map peaks (no denoise, no ground removal).
+# Steps:
+# 1) Read LAS -> shift Z so min(Z)=0
+# 2) Grid accumulation at fine resolution: per-cell sumZ and count
+# 3) Raw mean-height map = sumZ / count
+# 4) Fast "kernel" smoothing: Gaussian(sumZ) / Gaussian(count)
+# 5) Peak detection on smoothed mean-height map (top-down)
+# 6) plants/m^2 = #peaks / covered_area; save visuals + CSV + JSON
+# 7) NEW: Corn height evaluation from peak heights (avg/median/p10/p90), histogram + CSV
 
 import argparse
 import json
 import numpy as np
 import laspy
-import open3d as o3d
 import matplotlib.pyplot as plt
-from sklearn.neighbors import KernelDensity
-from sklearn.cluster import KMeans, DBSCAN
-from scipy.ndimage import gaussian_filter
-from scipy.signal import find_peaks  # add
-from scipy.ndimage import gaussian_filter1d  # add (与 ndimage 已导入不同函数)
-from scipy.spatial.transform import Rotation as R
+from scipy.ndimage import gaussian_filter, maximum_filter
+from sklearn.linear_model import RANSACRegressor
+from skimage.feature import blob_log
+import numpy as np
+from scipy.spatial import cKDTree
 
-# -------------------- I/O utils --------------------
+def blob_peaks(H, valid_mask, meta,
+               min_radius_m=0.05, max_radius_m=0.20,
+               threshold_rel=0.02,
+               min_peak_dist_m=0.15,
+               min_height_rel=0.2):
+    """
+    Detect approximately circular canopy blobs using Laplacian of Gaussian.
+    Adds:
+      - min_peak_dist_m: suppress peaks closer than this distance (m)
+      - min_height_rel: ignore blobs below Hmax * this ratio
+    Returns peaks_xy, peaks_rc, extra info.
+    """
+    res = meta["res"]
+    sigma_min = min_radius_m / res / np.sqrt(2)
+    sigma_max = max_radius_m / res / np.sqrt(2)
+    n_sigma = 8
+
+    # Work image (NaN -> 0)
+    H_work = np.nan_to_num(H * valid_mask, nan=0.0)
+    Hmax = np.nanmax(H_work)
+    if not np.isfinite(Hmax) or Hmax <= 0:
+        return np.empty((0, 2)), (np.array([]), np.array([])), {}
+
+    # Mask out low-height regions
+    low_thr = Hmax * min_height_rel
+    H_masked = H_work.copy()
+    H_masked[H_masked < low_thr] = 0.0
+
+    # LoG blob detection
+    blobs = blob_log(H_masked, min_sigma=sigma_min, max_sigma=sigma_max,
+                     num_sigma=n_sigma, threshold=threshold_rel)
+
+    if blobs.size == 0:
+        return np.empty((0, 2)), (np.array([]), np.array([])), {}
+
+    ys, xs, sigmas = blobs[:, 0], blobs[:, 1], blobs[:, 2]
+    px = meta["xmin"] + (xs + 0.5) * res
+    py = meta["ymin"] + (ys + 0.5) * res
+    peaks_xy = np.column_stack([px, py])
+    radii_m = sigmas * np.sqrt(2) * res
+
+    # 1️⃣ 过滤不合理半径
+    ok = (radii_m >= min_radius_m) & (radii_m <= max_radius_m)
+    peaks_xy = peaks_xy[ok]
+    ys, xs = ys[ok].astype(int), xs[ok].astype(int)
+
+    # 2️⃣ 按高度强度排序 (高的优先保留)
+    heights = H[ys, xs]
+    order = np.argsort(-heights)
+    peaks_xy = peaks_xy[order]
+    ys, xs = ys[order], xs[order]
+
+    # 3️⃣ 最小间距过滤 (基于KDTree)
+    if len(peaks_xy) > 1 and min_peak_dist_m > 0:
+        tree = cKDTree(peaks_xy)
+        keep_mask = np.ones(len(peaks_xy), dtype=bool)
+        for i, p in enumerate(peaks_xy):
+            if not keep_mask[i]:
+                continue
+            dists, idxs = tree.query(p, k=len(peaks_xy), distance_upper_bound=min_peak_dist_m)
+            close_idxs = idxs[(dists < min_peak_dist_m) & (idxs != i)]
+            keep_mask[close_idxs] = False
+        peaks_xy = peaks_xy[keep_mask]
+        ys, xs = ys[keep_mask], xs[keep_mask]
+
+    blob_meta = {
+        "avg_radius_m": float(np.mean(radii_m[ok])) if ok.any() else None,
+        "Hmax_m": float(Hmax),
+        "min_height_rel": float(min_height_rel),
+        "min_height_abs_m": float(low_thr),
+        "min_peak_dist_m": float(min_peak_dist_m)
+    }
+
+    return peaks_xy, (ys, xs), blob_meta
+
+
+# -------------------- I/O --------------------
 
 def read_las_xyz(path):
     """Read LAS to Nx3 float64 array."""
     las = laspy.read(path)
-    return np.vstack([las.x, las.y, las.z]).T.astype(np.float64)
+    pts = np.vstack([las.x, las.y, las.z]).T.astype(np.float64)
+    return pts
 
-def np_to_o3d(points):
-    """Numpy -> Open3D PointCloud."""
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points)
-    return pcd
+# -------------------- Grid + Meta --------------------
 
-def o3d_to_np(pcd):
-    """Open3D -> Numpy Nx3."""
-    return np.asarray(pcd.points)
+def make_grid_meta(points, res):
+    """Compute XY bounds and grid shape for given resolution (meters per pixel)."""
+    xy = points[:, :2]
+    xmin, ymin = xy.min(axis=0)
+    xmax, ymax = xy.max(axis=0)
+    # Expand tiny epsilon so max point falls inside last bin
+    eps = 1e-9
+    nx = max(1, int(np.ceil((xmax - xmin) / res)))
+    ny = max(1, int(np.ceil((ymax - ymin) / res)))
+    meta = {
+        "xmin": float(xmin),
+        "xmax": float(xmin + nx*res + eps),
+        "ymin": float(ymin),
+        "ymax": float(ymin + ny*res + eps),
+        "res": float(res),
+        "nx": nx,
+        "ny": ny
+    }
+    return meta
 
-# -------------------- Viz helpers --------------------
+def bin_points_maxz_count(points, meta):
+    """Accumulate maxZ and counts per grid cell using integer indexing."""
+    x = points[:, 0]; y = points[:, 1]; z = points[:, 2]
+    res = meta["res"]; xmin = meta["xmin"]; ymin = meta["ymin"]
+    nx, ny = meta["nx"], meta["ny"]
 
-def plot_xy(points, title, out_png, s=0.5):
-    """Scatter XY for quick look, save PNG."""
-    if points.size == 0:
-        print(f"[warn] empty points for {title}")
-        # still create an empty plot for consistency
-    plt.figure(figsize=(6,6), dpi=150)
-    if points.size:
-        plt.scatter(points[:,0], points[:,1], s=s)
-    plt.gca().set_aspect('equal', 'box')
+    ix = np.floor((x - xmin) / res).astype(np.int64)
+    iy = np.floor((y - ymin) / res).astype(np.int64)
+    ix = np.clip(ix, 0, nx - 1)
+    iy = np.clip(iy, 0, ny - 1)
+
+    count = np.zeros((ny, nx), dtype=np.float64)
+    maxz  = np.full((ny, nx), -np.inf, dtype=np.float64)
+
+    np.add.at(count, (iy, ix), 1.0)
+    np.maximum.at(maxz, (iy, ix), z)
+
+    return maxz, count
+
+def bin_points_sumz_count(points, meta):
+    """Accumulate sumZ and counts per grid cell using integer indexing (fast, robust)."""
+    x = points[:, 0]; y = points[:, 1]; z = points[:, 2]
+    res = meta["res"]; xmin = meta["xmin"]; ymin = meta["ymin"]
+    nx, ny = meta["nx"], meta["ny"]
+
+    ix = np.floor((x - xmin) / res).astype(np.int64)
+    iy = np.floor((y - ymin) / res).astype(np.int64)
+    ix = np.clip(ix, 0, nx - 1)
+    iy = np.clip(iy, 0, ny - 1)
+
+    count = np.zeros((ny, nx), dtype=np.float64)
+    sumz  = np.zeros((ny, nx), dtype=np.float64)
+
+    np.add.at(count, (iy, ix), 1.0)
+    np.add.at(sumz,  (iy, ix), z)
+
+    return sumz, count
+
+# -------------------- Height Maps --------------------
+
+def raw_max_height(maxz, count):
+    """Raw per-cell max height; NaN where count==0."""
+    H = np.full_like(maxz, np.nan, dtype=np.float64)
+    mask = count > 0
+    H[mask] = maxz[mask]
+    return H, mask
+
+def smoothed_max_height(maxz, count, sigma_pix):
+    """
+    Smoothed max height via normalized convolution:
+    Hs = gaussian(maxz * mask) / gaussian(mask)
+    This avoids diluting values in empty cells.
+    """
+    if sigma_pix < 0.5:
+        sigma_pix = 0.5
+    mask = (count > 0).astype(np.float64)
+    vals = np.where(mask > 0, maxz, 0.0)
+    gv = gaussian_filter(vals, sigma=sigma_pix, mode="nearest")
+    gm = gaussian_filter(mask, sigma=sigma_pix, mode="nearest")
+    Hs = np.full_like(gv, np.nan, dtype=np.float64)
+    valid = gm > 1e-9
+    Hs[valid] = gv[valid] / gm[valid]
+    return Hs, valid, gv, gm
+
+def raw_mean_height(sumz, count):
+    """Raw per-cell mean height; NaN where count==0."""
+    H = np.full_like(sumz, np.nan, dtype=np.float64)
+    mask = count > 0
+    H[mask] = sumz[mask] / count[mask]
+    return H, mask
+
+def smoothed_mean_height(sumz, count, sigma_pix):
+    """
+    Fast kernel-like smoothing:
+    smoothed_mean = gaussian(sumz) / gaussian(count)
+    Returns mean map and mask of valid pixels (where smoothed count is > tiny).
+    """
+    if sigma_pix < 0.5:
+        sigma_pix = 0.5  # avoid degenerate kernels
+    gz = gaussian_filter(sumz,  sigma=sigma_pix, mode="nearest")
+    gc = gaussian_filter(count, sigma=sigma_pix, mode="nearest")
+    Hs = np.full_like(gz, np.nan, dtype=np.float64)
+    valid = gc > 1e-9
+    Hs[valid] = gz[valid] / gc[valid]
+    return Hs, valid, gz, gc
+
+# -------------------- Ground Removal (RANSAC) --------------------
+
+def remove_ground_ransac(P, sample_n=500000, residual_threshold=0.1,
+                         out_sample_las="sampled_ransac_ground.las",
+                         out_nonground_las="nonground_downsampled.las",
+                         seed=42):
+    """
+    Detect and remove ground plane via RANSAC regression (color-preserving).
+    - P: Nx3 or Nx6 [x,y,z,(r,g,b)]
+    - out_sample_las: will contain ONLY sampled GROUND points (no non-ground)
+    - out_nonground_las: downsampled NON-GROUND points
+    """
+    import numpy as np
+    import laspy
+    from sklearn.linear_model import RANSACRegressor
+
+    np.random.seed(seed)
+    N = len(P)
+    has_color = (P.shape[1] >= 6)
+    sample_n = min(sample_n, N)
+
+    # ---- 1) Subsample for RANSAC fitting ----
+    idx = np.random.choice(N, sample_n, replace=False)
+    X = P[idx, :2]
+    y = P[idx, 2]
+
+    # ---- 2) Fit plane with RANSAC ----
+    ransac = RANSACRegressor(
+        min_samples=0.3,
+        residual_threshold=residual_threshold,
+        max_trials=100,
+        random_state=seed
+    )
+    ransac.fit(X, y)
+    a, b = ransac.estimator_.coef_
+    c = ransac.estimator_.intercept_
+
+    # ---- 3) All-point inlier mask (ground) ----
+    z_pred = a * P[:, 0] + b * P[:, 1] + c
+    residuals = np.abs(P[:, 2] - z_pred)
+    inliers = residuals < residual_threshold  # True = ground
+
+    print(f"[info]   ground plane: z = {a:.4f}*x + {b:.4f}*y + {c:.4f}")
+    print(f"[info]   ground inliers: {inliers.sum()}/{len(P)} "
+          f"({inliers.sum()/len(P)*100:.1f}%)")
+
+    # ---- helper: build LAS with optional RGB ----
+    def make_las(points, classifications):
+        header = laspy.LasHeader(version="1.2", point_format=3)  # supports RGB
+        las = laspy.LasData(header)
+        las.x = points[:, 0]
+        las.y = points[:, 1]
+        las.z = points[:, 2]
+        las.classification = classifications
+        if has_color:
+            rgb = np.clip(points[:, 3:6], 0, 65535).astype(np.uint16)
+            las.red, las.green, las.blue = rgb[:, 0], rgb[:, 1], rgb[:, 2]
+        return las
+
+    # ---- 4) SAVE *ONLY* SAMPLED GROUND POINTS ----
+    sampled_pts = P[idx]
+    sampled_pred_z = a * sampled_pts[:, 0] + b * sampled_pts[:, 1] + c
+    sampled_residuals = np.abs(sampled_pts[:, 2] - sampled_pred_z)
+    sampled_inliers = sampled_residuals < residual_threshold  # sampled ground mask
+
+    sampled_ground = sampled_pts[sampled_inliers]
+    if sampled_ground.shape[0] > 0:
+        cls_ground = np.full(sampled_ground.shape[0], 2, dtype=np.uint8)  # ground=2
+        make_las(sampled_ground, cls_ground).write(out_sample_las)
+        print(f"[info]   saved sampled ground only: {sampled_ground.shape[0]} -> {out_sample_las}")
+    else:
+        print(f"[warn]   no sampled ground points; skip writing {out_sample_las}")
+
+    # ---- 5) Remove ground & SAVE non-ground downsample ----
+    P_out = P[~inliers]  # non-ground only
+    print(f"[info]   remaining non-ground points: {len(P_out)}")
+
+    keep_n = min(4000000, len(P_out))
+    if keep_n > 0:
+        keep_idx = np.random.choice(len(P_out), keep_n, replace=False)
+        P_vis = P_out[keep_idx]
+        cls_nonground = np.ones(keep_n, dtype=np.uint8)  # non-ground=1
+        make_las(P_vis, cls_nonground).write(out_nonground_las)
+        print(f"[info]   saved downsampled non-ground: {keep_n} -> {out_nonground_las}")
+
+    return P_out, (a, b, c)
+
+
+
+
+
+# -------------------- Visualization --------------------
+
+def plot_heatmap(array, meta, title, out_png, cmap="viridis", vmin=None, vmax=None, dpi=300):
+    """Save a georeferenced heatmap (XY extent), high DPI."""
+    plt.figure(figsize=(8, 8), dpi=dpi)
+    extent = [meta["xmin"], meta["xmax"], meta["ymin"], meta["ymax"]]
+    plt.imshow(array, origin='lower', extent=extent, aspect='equal',
+               cmap=cmap, vmin=vmin, vmax=vmax)
     plt.title(title)
     plt.xlabel("X (m)"); plt.ylabel("Y (m)")
+    cbar = plt.colorbar()
     plt.tight_layout(); plt.savefig(out_png); plt.close()
 
-def plot_heatmap(grid, meta, title, out_png):
-    """Save a 2D heatmap for grid/KDE results."""
-    plt.figure(figsize=(6,6), dpi=150)
+def plot_peaks_on_height(H, meta, peaks_xy, title, out_png, dpi=320):
+    """Overlay peak points on the height map."""
+    plt.figure(figsize=(8, 8), dpi=dpi)
     extent = [meta["xmin"], meta["xmax"], meta["ymin"], meta["ymax"]]
-    plt.imshow(grid, origin='lower', extent=extent, aspect='equal')
-    plt.title(title); plt.xlabel("X (m)"); plt.ylabel("Y (m)")
-    cbar = plt.colorbar(); cbar.set_label("Intensity / Count")
-    plt.tight_layout(); plt.savefig(out_png); plt.close()
-
-def plot_rows(xprime, yprime, row_ids, labels, title, out_png):
-    """Visualize row assignment and DBSCAN clusters."""
-    plt.figure(figsize=(7,5), dpi=150)
-    # color by row id
-    if len(row_ids):
-        for rid in np.unique(row_ids):
-            idx = (row_ids == rid)
-            plt.scatter(xprime[idx], yprime[idx], s=1.0, label=f"row {rid}")
-    else:
-        plt.scatter(xprime, yprime, s=1.0, label="points")
-    # highlight clusters (labels >= 0)
-    if len(labels):
-        core = (labels >= 0)
-        plt.scatter(xprime[core], yprime[core], s=2.0, alpha=0.6)
-    plt.gca().set_aspect('equal', 'box')
-    plt.title(title); plt.xlabel("x' (m)"); plt.ylabel("y' (m)")
-    plt.legend(markerscale=6, fontsize=8, loc='best')
-    plt.tight_layout(); plt.savefig(out_png); plt.close()
-
-def plot_row_hist(xbins_centers, counts_smooth, peak_xs, title, out_png):
-    """Plot 1D histogram along row (x') with detected peaks."""
-    plt.figure(figsize=(7,3), dpi=150)
-    plt.plot(xbins_centers, counts_smooth, linewidth=1.2, label="smoothed hist")
-    if len(peak_xs):
-        plt.scatter(peak_xs, np.interp(peak_xs, xbins_centers, counts_smooth),
-                    s=12, marker='x', label="peaks")
+    plt.imshow(H, origin='lower', extent=extent, aspect='equal', cmap="viridis")
+    if len(peaks_xy):
+        plt.scatter(peaks_xy[:,0], peaks_xy[:,1], s=2, marker='x', c='w', linewidths=0.2)
     plt.title(title)
-    plt.xlabel("x' (m)"); plt.ylabel("count")
-    plt.tight_layout(); plt.legend(fontsize=8)
-    plt.savefig(out_png); plt.close()
+    plt.xlabel("X (m)"); plt.ylabel("Y (m)")
+    cbar = plt.colorbar(); cbar.set_label("Height (m)")
+    plt.tight_layout(); plt.savefig(out_png); plt.close()
 
+def plot_height_histogram(heights, out_png, dpi=300, bins=30):
+    """Plot and save histogram of per-plant heights."""
+    plt.figure(figsize=(7,5), dpi=dpi)
+    plt.hist(heights[~np.isnan(heights)], bins=bins)
+    plt.xlabel("Plant height (m)")
+    plt.ylabel("Count")
+    plt.title("Corn height distribution")
+    plt.tight_layout(); plt.savefig(out_png); plt.close()
 
-# -------------------- Step 1: read --------------------
+# -------------------- Peak Detection --------------------
 
-def step1_read(las_path):
-    """Step1: read raw LAS."""
-    pts = read_las_xyz(las_path)
-    plot_xy(pts, "Step1: Raw XY", "step1_raw_xy.png")
-    return pts
-
-# -------------------- Step 2: denoise --------------------
-
-def statistical_denoise(pcd, nb_neighbors=20, std_ratio=2.0):
-    """Statistical outlier removal."""
-    clean, _ = pcd.remove_statistical_outlier(nb_neighbors=nb_neighbors,
-                                              std_ratio=std_ratio)
-    return clean
-
-def voxel_downsample(pcd, voxel=0.03):
-    """Voxel downsample for speed."""
-    if voxel and voxel > 0:
-        return pcd.voxel_down_sample(voxel)
-    return pcd
-
-def step2_denoise(points, voxel=0.03, nb_neighbors=20, std_ratio=2.0):
-    """Step2: downsample + denoise."""
-    pcd = np_to_o3d(points)
-    pcd = voxel_downsample(pcd, voxel)
-    pcd = statistical_denoise(pcd, nb_neighbors, std_ratio)
-    pts = o3d_to_np(pcd)
-    plot_xy(pts, "Step2: Denoised XY", "step2_denoised_xy.png")
-    return pts
-
-# -------------------- Step 3: RANSAC plane --------------------
-
-def ransac_plane(points, dist_thresh=0.02, ransac_n=3, max_iter=2000):
-    """Fit ground plane by RANSAC."""
-    pcd = np_to_o3d(points)
-    model, inliers = pcd.segment_plane(distance_threshold=dist_thresh,
-                                       ransac_n=ransac_n,
-                                       num_iterations=max_iter)
-    a,b,c,d = model
-    inlier = pcd.select_by_index(inliers)
-    outlier = pcd.select_by_index(inliers, invert=True)
-    in_np = o3d_to_np(inlier)
-    out_np = o3d_to_np(outlier)
-    # Visualize inliers/outliers
-    plot_xy(in_np,  "Step3: Ground inliers XY",  "step3_ground_inliers_xy.png")
-    plot_xy(out_np, "Step3: Non-ground (pre-band) XY", "step3_nonground_preband_xy.png")
-    return (a,b,c,d), in_np, out_np
-
-def signed_distance(points, plane):
-    """Signed distance to plane ax+by+cz+d=0."""
-    a,b,c,d = plane
-    n = np.sqrt(a*a+b*b+c*c) + 1e-12
-    return (points[:,0]*a + points[:,1]*b + points[:,2]*c + d) / n
-
-# -------------------- Step 4: remove ground band --------------------
-
-def step4_remove_ground_band(nonground_preband, plane, band=0.10):
-    """Remove |dist|<=band."""
-    dist = signed_distance(nonground_preband, plane)
-    keep = np.abs(dist) > band
-    kept = nonground_preband[keep]
-    removed = nonground_preband[~keep]
-    plot_xy(removed, "Step4: Removed band XY", "step4_removed_band_xy.png")
-    plot_xy(kept,   "Step4: Kept after band XY", "step4_kept_after_band_xy.png")
-    return kept
-
-# -------------------- Step 5A: grid density --------------------
-
-def grid_density_xy(points, cell=0.5):
-    """Uniform XY grid counting."""
-    if points.size == 0:
-        return np.zeros((1,1)), {
-            "xmin":0,"xmax":1,"ymin":0,"ymax":1,"cell":cell,"nx":1,"ny":1
-        }
-    xy = points[:,:2]
-    xmin, ymin = xy.min(axis=0)
-    xmax, ymax = xy.max(axis=0)
-    nx = max(1, int(np.ceil((xmax - xmin) / cell)))
-    ny = max(1, int(np.ceil((ymax - ymin) / cell)))
-    grid = np.zeros((ny, nx), dtype=int)
-    ix = np.clip(((xy[:,0]-xmin)/cell).astype(int), 0, nx-1)
-    iy = np.clip(((xy[:,1]-ymin)/cell).astype(int), 0, ny-1)
-    for xg, yg in zip(ix, iy):
-        grid[yg, xg] += 1
-    meta = {"xmin":float(xmin),"xmax":float(xmax),
-            "ymin":float(ymin),"ymax":float(ymax),
-            "cell":float(cell),"nx":nx,"ny":ny}
-    return grid, meta
-
-def step5a_grid(points, cell=0.5):
-    """Step5A: grid heatmap."""
-    grid, meta = grid_density_xy(points, cell=cell)
-    plot_heatmap(grid, meta, f"Step5A: Grid density (cell={cell}m)", "step5a_grid_density.png")
-    return grid, meta
-
-# -------------------- Step 5B: KDE intensity --------------------
-
-def kde_intensity_xy(points, bandwidth=0.4, res=0.25):
-    """KDE-based 2D intensity."""
-    if points.size == 0:
-        return np.zeros((1,1)), {
-            "xmin":0,"xmax":1,"ymin":0,"ymax":1,"grid_res":res,"bandwidth":bandwidth,"nx":1,"ny":1
-        }
-    xy = points[:,:2]
-    xmin, ymin = xy.min(axis=0)
-    xmax, ymax = xy.max(axis=0)
-    xs = np.arange(xmin, xmax + res, res)
-    ys = np.arange(ymin, ymax + res, res)
-    xx, yy = np.meshgrid(xs, ys)
-    sample = np.vstack([xx.ravel(), yy.ravel()]).T
-    kde = KernelDensity(bandwidth=bandwidth, kernel="gaussian").fit(xy)
-    logd = kde.score_samples(sample)
-    dens = np.exp(logd).reshape(len(ys), len(xs))
-    meta = {"xmin":float(xmin),"xmax":float(xmax),
-            "ymin":float(ymin),"ymax":float(ymax),
-            "grid_res":float(res),"bandwidth":float(bandwidth),
-            "nx":len(xs),"ny":len(ys)}
-    return dens, meta
-
-def step5b_kde(points, bandwidth=0.4, res=0.25):
-    """Fast KDE via grid count + Gaussian blur."""
-    if points.size == 0:
-        dens = np.zeros((1,1)); meta = {"xmin":0,"xmax":1,"ymin":0,"ymax":1,"grid_res":res,"bandwidth":bandwidth,"nx":1,"ny":1}
-        plot_heatmap(dens, meta, f"Step5B: KDE (fast, bw={bandwidth}, res={res}m)", "step5b_kde_intensity.png")
-        return dens, meta
-
-    # 1) grid count (reuse Step5A logic)
-    grid, meta = grid_density_xy(points, cell=res)
-
-    # 2) gaussian blur; sigma in pixels = bandwidth / res
-    sigma_pix = max(0.5, bandwidth / res)  # avoid sigma too small
-    dens = gaussian_filter(grid.astype(float), sigma=sigma_pix, mode="nearest")
-
-    dens = dens / (2.0 * np.pi * (bandwidth**2))  # optional scaling
-
-    plot_heatmap(dens, meta, f"Step5B: KDE (fast, bw={bandwidth}, res={res}m)", "step5b_kde_intensity.png")
-    return dens, meta
-
-# -------------------- Step 5C: row-aware density --------------------
-
-def pca_xy(points):
-    """Rotate XY so rows align with x' axis."""
-    xy = points[:,:2]
-    mean = xy.mean(axis=0, keepdims=True)
-    zero = xy - mean
-    cov = np.cov(zero.T)
-    vals, vecs = np.linalg.eigh(cov)
-    major = vecs[:, np.argmax(vals)]
-    angle = np.arctan2(major[1], major[0])
-    rot = R.from_euler('z', -angle).as_matrix()[:2,:2]
-    xy_rot = zero @ rot.T
-    return xy_rot[:,0], xy_rot[:,1]
-
-def estimate_num_rows(yprime, approx_row_spacing):
-    """Estimate row count from span / spacing."""
-    span = yprime.max() - yprime.min() if len(yprime) else 0.0
-    if span <= 0: return 1
-    n = int(np.round(span / max(approx_row_spacing, 1e-3)))
-    return max(1, n)
-
-def step5c_row_density_peaks(points,
-                             row_spacing=0.75,
-                             row_band=0.12,
-                             xbin=0.05,
-                             smooth_sigma=1.5,
-                             peak_min_spacing=0.18,
-                             peak_prominence=5.0,
-                             height_min=None,
-                             example_rows_to_plot=12):
+def local_max_peaks(H, valid_mask, meta, min_peak_distance_m=0.18,
+                    rel_threshold=0.1, q_threshold=None, min_smoothed_count=0.5):
     """
-    Row-wise stem counting via 1D peak detection along x'.
-    - row_spacing: prior row spacing (m), for plants/m^2 conversion.
-    - row_band: half-width in y' (m) to keep near the row center (suppress leaves).
-    - xbin: histogram bin size along x' (m).
-    - smooth_sigma: Gaussian smoothing sigma in bins.
-    - peak_min_spacing: minimal peak separation in meters (≈ plant spacing).
-    - peak_prominence: required prominence for peaks (robustness).
-    - height_min: optional min height above low z to filter out low clutter (m).
-    - example_rows_to_plot: save hist figures for first N rows.
+    Find local maxima (NMS) on height map.
+    - min_peak_distance_m: NMS window in meters (typical plant spacing ~0.15-0.30)
+    - rel_threshold: keep peaks with H >= rel_threshold * max(H in valid)
+    - q_threshold: optional percentile (0..1), e.g., 0.6; final thr = max(rel_thr, q_thr)
+    - min_smoothed_count: require smoothed count >= this to avoid spurious peaks
+
+    Returns peaks_xy, peaks_rc, and thresholds used.
     """
-    P = points
-    if P.size == 0:
-        return [], {"avg_linear_density_stems_per_m": 0.0,
-                    "avg_density_plants_per_m2": 0.0,
-                    "row_spacing_m": row_spacing}
+    res = meta["res"]
+    # prepare working mask and values
+    H_work = H.copy()
+    H_work[~valid_mask] = np.nan
 
-    # optional height filter
-    if height_min is not None:
-        z0 = np.percentile(P[:,2], 5)
-        P = P[P[:,2] > (z0 + height_min)]
-    if P.size == 0:
-        return [], {"avg_linear_density_stems_per_m": 0.0,
-                    "avg_density_plants_per_m2": 0.0,
-                    "row_spacing_m": row_spacing}
+    # global stats over valid region
+    H_valid = H_work[np.isfinite(H_work)]
+    if H_valid.size == 0:
+        return np.empty((0,2)), (np.array([]), np.array([])), {"thr": np.nan, "win_px": 0}
 
-    # PCA align rows
-    xprime, yprime = pca_xy(P)
+    Hmax = float(np.nanmax(H_valid))
+    thr_rel = rel_threshold * Hmax
+    thr_q = -np.inf
+    if q_threshold is not None:
+        thr_q = float(np.nanquantile(H_valid, q_threshold))
+    thr = max(thr_rel, thr_q)
 
-    # KMeans split rows
-    n_rows = estimate_num_rows(yprime, row_spacing)
-    if n_rows > 1:
-        km = KMeans(n_clusters=n_rows, n_init="auto", random_state=0)
-        row_ids = km.fit_predict(yprime.reshape(-1,1))
-        row_centers = np.sort(km.cluster_centers_.ravel())
-    else:
-        row_ids = np.zeros(len(yprime), dtype=int)
-        row_centers = np.array([np.median(yprime)])
+    # NMS window in pixels
+    win_px = max(3, int(round(min_peak_distance_m / max(res, 1e-9))))
 
-    results = []
-    # distance in bins for peak separation
-    min_dist_bins = max(1, int(np.round(peak_min_spacing / max(xbin, 1e-6))))
+    # maximum_filter ignores NaN => temporarily fill with -inf
+    H_filled = H_work.copy()
+    H_filled[~np.isfinite(H_filled)] = -np.inf
+    max_f = maximum_filter(H_filled, size=win_px, mode="nearest")
+    is_peak = (H_filled == max_f)
 
-    # per-row processing
-    for rid in np.unique(row_ids):
-        mask_row = (row_ids == rid)
-        xr = xprime[mask_row]
-        yr = yprime[mask_row]
+    # apply thresholds
+    is_peak &= (H_filled >= thr)
 
-        if len(xr) < 2:
-            continue
+    ys, xs = np.where(is_peak)
 
-        # keep a tight band around row center to suppress leaves
-        y_med = np.median(yr)
-        band_mask = np.abs(yr - y_med) <= row_band
-        xr_band = xr[band_mask]
+    # convert (row,col) -> world XY
+    xmin, ymin, res = meta["xmin"], meta["ymin"], meta["res"]
+    px = xmin + (xs + 0.5) * res
+    py = ymin + (ys + 0.5) * res
+    peaks_xy = np.vstack([px, py]).T
 
-        if len(xr_band) < 2:
-            # fallback to full row points
-            xr_band = xr
-
-        # histogram along x'
-        xmin, xmax = xr_band.min(), xr_band.max()
-        if xmax - xmin < xbin*3:
-            continue
-        nbins = int(np.ceil((xmax - xmin) / xbin))
-        bins = np.linspace(xmin, xmax, nbins+1)
-        counts, edges = np.histogram(xr_band, bins=bins)
-        centers = 0.5*(edges[:-1]+edges[1:])
-
-        # smooth histogram to form "stem signal"
-        counts_smooth = gaussian_filter1d(counts.astype(float), sigma=smooth_sigma)
-
-        # detect peaks
-        peaks_idx, _ = find_peaks(counts_smooth,
-                                  distance=min_dist_bins,
-                                  prominence=peak_prominence)
-        plants = int(len(peaks_idx))
-
-        # row length in x'
-        row_length = float(xmax - xmin)
-        linear_density = (plants / row_length) if row_length > 0 else 0.0
-
-        # save per-row hist figure for first few rows
-        if rid < example_rows_to_plot:
-            peak_xs = centers[peaks_idx] if plants > 0 else np.array([])
-            plot_row_hist(centers, counts_smooth, peak_xs,
-                          title=f"Row {rid}: 1D hist & peaks",
-                          out_png=f"step5c_row{rid:02d}_hist.png")
-
-        results.append({
-            "row_index": int(rid),
-            "row_length_m": row_length,
-            "plants_count": plants,
-            "linear_density_stems_per_m": linear_density
-        })
-
-    # sort rows by index
-    results = sorted(results, key=lambda d: d["row_index"])
-
-    # compute averages
-    avg_lin = float(np.mean([r["linear_density_stems_per_m"] for r in results])) if results else 0.0
-    avg_plants_m2 = (avg_lin / row_spacing) if row_spacing > 0 else 0.0
-
-    # quick overview scatter for sanity
-    # (reuse your row scatter but label-only; not necessary to draw peaks there)
-    # we keep your existing plot_rows for DBSCAN; for peaks, scatter per-row is enough
-    # If you want: you can still call plot_xy on the kept points already saved.
-
-    meta = {"avg_linear_density_stems_per_m": avg_lin,
-            "avg_density_plants_per_m2": avg_plants_m2,
-            "row_spacing_m": row_spacing}
-    return results, meta
+    return peaks_xy, (ys, xs), {"thr": thr, "win_px": win_px, "Hmax": Hmax}
 
 # -------------------- Main --------------------
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("las_path", help=".las path (units in meters expected)")
-    ap.add_argument("--voxel", type=float, default=0.03, help="voxel size (m)")
-    ap.add_argument("--nb_neighbors", type=int, default=20, help="denoise neighbors")
-    ap.add_argument("--std_ratio", type=float, default=2.0, help="denoise std ratio")
-    ap.add_argument("--ransac_dist", type=float, default=0.02, help="RANSAC thresh (m)")
-    ap.add_argument("--ground_band", type=float, default=0.10, help="remove |dist|<=band (m)")
-    ap.add_argument("--grid_cell", type=float, default=0.5, help="grid cell (m)")
-    ap.add_argument("--kde_bw", type=float, default=0.4, help="KDE bandwidth (m)")
-    ap.add_argument("--kde_res", type=float, default=0.25, help="KDE grid (m)")
-    ap.add_argument("--row_spacing", type=float, default=0.75, help="row spacing prior (m)")
-    ap.add_argument("--dbscan_eps", type=float, default=0.10, help="DBSCAN eps (m)")
-    ap.add_argument("--dbscan_min", type=int, default=20, help="DBSCAN min samples")
-    ap.add_argument("--row_height_min", type=float, default=None, help="min height above low z (m)")
-    ap.add_argument("--save_intermediate_ply", action="store_true", help="save PLYs")
-    ap.add_argument("--row_band", type=float, default=0.12, help="half band in y' around row center (m)")
-    ap.add_argument("--xbin", type=float, default=0.05, help="histogram bin along x' (m)")
-    ap.add_argument("--smooth_sigma", type=float, default=1.5, help="gaussian sigma (in bins) for hist smoothing")
-    ap.add_argument("--peak_min_spacing", type=float, default=0.18, help="min spacing between peaks (m)")
-    ap.add_argument("--peak_prominence", type=float, default=5.0, help="peak prominence for find_peaks")
+    # Grid + smoothing
+    ap.add_argument("--res", type=float, default=0.05, help="grid resolution (m/pixel)")
+    ap.add_argument("--bw", type=float, default=0.15, help="Gaussian bandwidth (m) for smoothing (converted to sigma in pixels)")
+    # Peak detection
+    ap.add_argument("--min_peak_dist", type=float, default=0.18, help="minimum peak spacing (m)")
+    ap.add_argument("--thr_rel", type=float, default=0.25, help="relative threshold (0..1 of max height)")
+    ap.add_argument("--thr_q", type=float, default=None, help="optional quantile threshold (0..1), e.g., 0.6")
+    # Output options
+    ap.add_argument("--fig_dpi", type=int, default=320, help="PNG figure DPI")
+    ap.add_argument("--save_peaks_csv", action="store_true", help="save peaks as CSV")
 
     args = ap.parse_args()
 
-    # Step 1
-    print ("[info] Step 1: Read LASs")
-    raw = step1_read(args.las_path)
-    if raw.size == 0:
+    # 1) Read
+    print("[info] Step 1: Read LAS")
+    P = read_las_xyz(args.las_path)
+    if P.size == 0:
         print("[error] no points read from LAS")
         return
-    print(f"[info]   read {len(raw)} points")
+    print(f"[info]   points: {len(P)}")
+    # Shift Z so min=0
+    zmin = float(P[:,2].min())
+    P[:,2] -= zmin
+    print(f"[info]   z-shift applied: minZ -> 0. (original minZ={zmin:.3f})")
 
-    # Step 2
-    print ("[info] Step 2: Denoise")
-    den = step2_denoise(raw, voxel=args.voxel, nb_neighbors=args.nb_neighbors, std_ratio=args.std_ratio)
-    if den.size == 0:    
-        print("[error] no points left after denoising")
-        return
-    print(f"[info]   {len(den)} points after denoising")
-
-    # Step 3
-    print ("[info] Step 3: RANSAC plane")
-    plane, ground_inliers, nonground_preband = ransac_plane(den, dist_thresh=args.ransac_dist)
-    print(f"[info]   plane: {plane[0]:.4f}x + {plane[1]:.4f}y + {plane[2]:.4f}z + {plane[3]:.4f} = 0")
-    print(f"[info]   {len(ground_inliers)} ground inliers, {len(nonground_preband)} non-ground pre-band")
-    if nonground_preband.size == 0:
-        print("[error] no non-ground points left after RANSAC")
-        return  
-
-    # Optionally save PLYs
-    if args.save_intermediate_ply:
-        o3d.io.write_point_cloud("step3_ground_inliers.ply", np_to_o3d(ground_inliers))
-        o3d.io.write_point_cloud("step3_nonground_preband.ply", np_to_o3d(nonground_preband))
-
-    # Step 4
-    print ("[info] Step 4: Remove ground band")
-    kept = step4_remove_ground_band(nonground_preband, plane, band=args.ground_band)
-    print(f"[info]   {len(kept)} points kept after band removal")
-
-    if args.save_intermediate_ply:
-        o3d.io.write_point_cloud("step4_kept_after_band.ply", np_to_o3d(kept))
-
-    if kept.size == 0:
-        print("[error] no points left after ground band removal")
-        return
-
-    # Step 5A
-    print ("[info] Step 5A: Grid density")
-    grid, grid_meta = step5a_grid(kept, cell=args.grid_cell)
+    # --- Ground removal ---
+    #print("[info] Step 1.5: RANSAC ground removal")
+    #P, plane = remove_ground_ransac(P)
 
 
-    # Step 5B
-    print ("[info] Step 5B: KDE intensity")
-    dens, kde_meta = step5b_kde(kept, bandwidth=args.kde_bw, res=args.kde_res)
+    # 2) Grid + accumulation (maxZ + count)
+    print("[info] Step 2: Grid accumulation (maxZ + count)")
+    meta = make_grid_meta(P, args.res)
+    print(f"[info]   grid: {meta['ny']} x {meta['nx']}  res={meta['res']} m")
+    print(f"[info]   extent X[{meta['xmin']:.2f}, {meta['xmax']:.2f}], Y[{meta['ymin']:.2f}, {meta['ymax']:.2f}]")
+    maxz, count = bin_points_maxz_count(P, meta)
+    covered_cells = int((count > 0).sum())
+    coverage = covered_cells / (meta["nx"] * meta["ny"]) * 100.0
+    print(f"[info]   covered cells: {covered_cells} ({coverage:.1f}%)")
 
+    # 3) Raw max-height map
+    print("[info] Step 3: Raw max-height map")
+    H_raw, mask_raw = raw_max_height(maxz, count)
+    vmax_raw = float(np.nanquantile(H_raw, 0.98)) if np.isfinite(H_raw).any() else None
+    plot_heatmap(H_raw, meta, "Step3: Raw max height (m)", "step3_max_height_raw.png",
+                 vmin=0.0, vmax=vmax_raw, dpi=args.fig_dpi)
 
-    # Step 5C (peaks-based)
-    print ("[info] Step 5C: Row-wise peak counting")
-    row_stats, row_meta = step5c_row_density_peaks(
-        kept,
-        row_spacing=args.row_spacing,
-        row_band=args.row_band,
-        xbin=args.xbin,
-        smooth_sigma=args.smooth_sigma,
-        peak_min_spacing=args.peak_min_spacing,
-        peak_prominence=args.peak_prominence,
-        height_min=args.row_height_min,
-        example_rows_to_plot=12
+    # 4) Smoothed max-height via normalized convolution
+    print("[info] Step 4: Smoothed max-height via Gaussian(normalized)")
+    sigma_pix = max(0.5, args.bw / max(meta["res"], 1e-9))
+    print(f"[info]   smoothing: bandwidth={args.bw} m  => sigma={sigma_pix:.2f} px")
+    H_smooth, mask_smooth, gv, gm = smoothed_max_height(maxz, count, sigma_pix)
+    vmax_sm = float(np.nanquantile(H_smooth, 0.98)) if np.isfinite(H_smooth).any() else None
+    plot_heatmap(H_smooth, meta, "Step4: Smoothed max height (m)", "step4_max_height_smooth.png",
+                 vmin=0.0, vmax=vmax_sm, dpi=args.fig_dpi)
+
+    '''
+    # 5) Peak detection on height map
+    print("[info] Step 5: Peak detection on smoothed height map")
+    peaks_xy, (ys, xs), thr_meta = local_max_peaks(
+        H_smooth, mask_smooth, meta,
+        min_peak_distance_m=args.min_peak_dist,
+        rel_threshold=args.thr_rel,
+        q_threshold=args.thr_q
     )
-    print(f"[info]   {len(row_stats)} rows detected")
-    print(f"[info]   average linear density: {row_meta['avg_linear_density_stems_per_m']:.3f} stems/m")
-    print(f"[info]   average plants per m^2: {row_meta['avg_density_plants_per_m2']:.3f} (using row_spacing={row_meta['row_spacing_m']} m)")
-    print(f"[info]   row spacing used: {row_meta['row_spacing_m']} m")
+    print(f"[info]   NMS window: {thr_meta['win_px']} px  (~{thr_meta['win_px']*meta['res']:.2f} m)")
+    print(f"[info]   Hmax(valid)={thr_meta['Hmax']:.3f} m  threshold={thr_meta['thr']:.3f} m")
+    print(f"[info]   peaks detected: {len(peaks_xy)}")
+    '''
 
-    # Save summary
+    peaks_xy, (ys, xs), blob_meta = blob_peaks(
+        H_smooth, mask_smooth, meta,
+        min_radius_m=0.06,  # 冠幅下限
+        max_radius_m=0.25,  # 冠幅上限
+        threshold_rel=0.03,
+        min_peak_dist_m=args.min_peak_dist,
+        min_height_rel=args.thr_rel  # 冠高下限
+
+    )
+    print(f"[info]   blob-based peaks detected: {len(peaks_xy)} "
+        f"(avg radius={blob_meta.get('avg_radius_m'):.3f} m)")
+
+
+    # Visualization with peaks
+    plot_peaks_on_height(H_smooth, meta, peaks_xy,
+                         title=f"Step5: Height peaks (bw={args.bw}m, minDist={args.min_peak_dist}m)",
+                         out_png="step5_height_peaks.png", dpi=args.fig_dpi)
+
+    # 6) Plants per m^2 from peaks and covered area
+    area_m2 = covered_cells * (meta["res"] ** 2)
+    plants_per_m2 = (len(peaks_xy) / area_m2) if area_m2 > 0 else 0.0
+    print(f"[info] Step 6: Density estimate")
+    print(f"[info]   covered area: {area_m2:.2f} m^2")
+    print(f"[info]   plants per m^2: {plants_per_m2:.3f}")
+
+    # -------- NEW: Corn height evaluation (per-plant) --------
+    print("[info] Step 7: Corn height evaluation (per-plant stats)")
+    if len(peaks_xy):
+        peak_heights = H_smooth[ys, xs]  # height proxy at plant peaks
+        # Basic stats
+        h_valid = peak_heights[np.isfinite(peak_heights)]
+        if h_valid.size > 0:
+            h_mean   = float(np.mean(h_valid))
+            h_std    = float(np.std(h_valid, ddof=0))
+            h_median = float(np.median(h_valid))
+            h_p10    = float(np.quantile(h_valid, 0.10))
+            h_p90    = float(np.quantile(h_valid, 0.90))
+            print(f"[info]   plants used: {h_valid.size}")
+            print(f"[info]   avg height: {h_mean:.3f} m  (median={h_median:.3f} m, P10={h_p10:.3f}, P90={h_p90:.3f})")
+            # Save histogram + CSV
+            hist_png = "corn_height_hist.png"
+            plot_height_histogram(h_valid, hist_png, dpi=300, bins=30)
+            heights_csv = "corn_heights.csv"
+            # Save positions + heights for downstream QA
+            out_ph = np.column_stack([peaks_xy, peak_heights])
+            np.savetxt(heights_csv, out_ph, delimiter=",", header="x_m,y_m,height_m", comments="")
+        else:
+            h_mean = h_std = h_median = h_p10 = h_p90 = None
+            hist_png = None
+            heights_csv = None
+            print("[warn]   no valid peak heights to evaluate.")
+    else:
+        peak_heights = np.array([])
+        h_mean = h_std = h_median = h_p10 = h_p90 = None
+        hist_png = None
+        heights_csv = None
+        print("[warn]   no peaks detected; skip height evaluation.")
+
+    # Optionally save peaks (legacy switch keeps behavior)
+    peaks_file = None
+    if args.save_peaks_csv and len(peaks_xy):
+        peaks_file = "peaks_xy.csv"
+        out = np.column_stack([peaks_xy, H_smooth[ys, xs]])
+        np.savetxt(peaks_file, out, delimiter=",", header="x_m,y_m,height_m", comments="")
+        print(f"[info]   saved peaks to: {peaks_file}")
+
+    # 8) Save summary JSON
     summary = {
-        "plane": {"a":plane[0], "b":plane[1], "c":plane[2], "d":plane[3]},
-        "grid_meta": grid_meta,
-        "kde_meta": kde_meta,
-        "rows": row_stats,
-        "avg_linear_density_stems_per_m": row_meta["avg_linear_density_stems_per_m"],
-        "avg_density_plants_per_m2": row_meta["avg_density_plants_per_m2"],
-        "row_spacing_m": row_meta["row_spacing_m"]
+        "grid_meta": meta,
+        "params": {
+            "res": args.res,
+            "bandwidth_m": args.bw,
+            "min_peak_dist_m": args.min_peak_dist,
+            "thr_rel": args.thr_rel,
+            "thr_q": args.thr_q
+        },
+        "stats": {
+            "points": int(len(P)),
+            "z_shift_min_applied": float(zmin),
+            "covered_cells": covered_cells,
+            "covered_area_m2": float(area_m2),
+            "peaks_count": int(len(peaks_xy)),
+            "plants_per_m2": float(plants_per_m2),
+            # new blob-based metadata
+            "Hmax_valid_m": None,
+            "threshold_used_m": None,
+            "blob_avg_radius_m": blob_meta.get("avg_radius_m"),
+            "corn_height": {
+                "n_peaks_used": int(len(peaks_xy)),
+                "avg_m": h_mean,
+                "std_m": h_std,
+                "median_m": h_median,
+                "p10_m": h_p10,
+                "p90_m": h_p90,
+                "method": "sample H_smooth at blob centers (LoG peaks)"
+            }
+        },
+        "outputs": {
+            "max_height_raw_png": "step3_max_height_raw.png",
+            "max_height_smooth_png": "step4_max_height_smooth.png",
+            "height_peaks_png": "step5_height_peaks.png",
+            "peaks_csv": peaks_file,
+            # NEW exports
+            "corn_height_hist_png": hist_png,
+            "corn_heights_csv": heights_csv
+        }
     }
-
-    with open("summary_density.json", "w", encoding="utf-8") as f:
+    with open("summary_height_peaks.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
     print("[done] Figures saved:")
-    print(" - step1_raw_xy.png")
-    print(" - step2_denoised_xy.png")
-    print(" - step3_ground_inliers_xy.png")
-    print(" - step3_nonground_preband_xy.png")
-    print(" - step4_removed_band_xy.png")
-    print(" - step4_kept_after_band_xy.png")
-    print(" - step5a_grid_density.png")
-    print(" - step5b_kde_intensity.png")
-    print(" - step5c_rows_clusters.png")
-    print("Summary: summary_density.json")
+    print(" - step3_max_height_raw.png")
+    print(" - step4_max_height_smooth.png")
+    print(" - step5_height_peaks.png")
+    if hist_png:
+        print(f" - {hist_png}")
+    if peaks_file:
+        print(f" - {peaks_file}")
+    if heights_csv:
+        print(f" - {heights_csv}")
+    print("Summary: summary_height_peaks.json")
 
 if __name__ == "__main__":
     main()
