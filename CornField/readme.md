@@ -9,6 +9,12 @@ python corn_density_pipeline.py soybean.las --res 0.01 --bw 0.05 --min_peak_dist
 
 python corn_density_pipeline.py corn.las --res 0.01 --bw 0.05 --min_peak_dist 0.2 --fig_dpi 640 --save_peaks_csv
 
+## New pipeline based on row extraction:
+cd C:/ForestNet/Cornfield
+conda activate corn-density-env
+python crop_row.py soybean.las
+
+
 
 
 
