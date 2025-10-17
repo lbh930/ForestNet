@@ -15,6 +15,11 @@ conda activate corn-density-env
 python crop_row.py soybean.las
 
 
+## New new pipeline based on row extraction:
+cd C:/ForestNet/Cornfield
+conda activate corn-density-env
+python crop_row_finder.py soybean.las
+
 
 
 
