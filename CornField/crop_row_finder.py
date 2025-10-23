@@ -109,7 +109,7 @@ def remove_ground_points(x, y, z, percentile=15):
     return x_filtered, y_filtered, z_filtered
 
 
-def split_into_tiles(x, y, z, tile_size=20.0):
+def split_into_tiles(x, y, z, tile_size=10.0):
     """
     将点云分割成NxN米的tiles
     
@@ -1294,7 +1294,7 @@ def main():
         if idx + 1 < len(sys.argv):
             downsample_size = float(sys.argv[idx + 1])
     
-    tile_size = 20.0  # 默认20x20m
+    tile_size = 10.0  # 默认10x10m
     if '--tile_size' in sys.argv:
         idx = sys.argv.index('--tile_size')
         if idx + 1 < len(sys.argv):
