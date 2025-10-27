@@ -216,6 +216,29 @@ def main():
     
     print(f"\n总计: {len(plants)} 株植物")
     
+    # 计算统计信息
+    if plants:
+        # 计算面积（从extent）
+        x_range = extent[1] - extent[0]
+        y_range = extent[3] - extent[2]
+        area_m2 = x_range * y_range
+        
+        # 计算密度
+        density = len(plants) / area_m2
+        
+        # 计算平均高度
+        heights = [p['height'] for p in plants]
+        avg_height = np.mean(heights)
+        std_height = np.std(heights)
+        min_height = np.min(heights)
+        max_height = np.max(heights)
+        
+        print(f"\n统计信息:")
+        print(f"  田地面积: {area_m2:.2f} m²")
+        print(f"  作物密度: {density:.2f} 株/m²")
+        print(f"  平均高度: {avg_height:.3f} ± {std_height:.3f} m")
+        print(f"  高度范围: [{min_height:.3f}, {max_height:.3f}] m")
+    
     # 4. 可视化
     visualize_chm_with_plants(chm, extent, plants, output_path)
     

@@ -113,6 +113,7 @@ def main():
 
     total_plants = 0
     total_area = 0.0
+    all_heights = []  # 收集所有植物的高度
 
     # 用于记录每个 tile 的汇总
     tile_summaries = []
@@ -148,7 +149,7 @@ def main():
             row_center = float(match.group(1)) if match else None
 
             if method == 'density':
-                plant_count, _, _ = density_counter.density_count_from_row(
+                plant_count, _, results = density_counter.density_count_from_row(
                     points,
                     direction=count_direction,
                     expected_spacing=params["expected_spacing"],
@@ -164,7 +165,7 @@ def main():
                     row_center=row_center
                 )
             else:
-                plant_count, _, _ = height_counter.height_count_from_row(
+                plant_count, _, results = height_counter.height_count_from_row(
                     points,
                     direction=count_direction,
                     expected_spacing=params["expected_spacing"],
@@ -184,6 +185,12 @@ def main():
             # ✅ 修复：累加计数
             total_plants += plant_count
             tile_plant_count += plant_count
+            
+            # 收集高度信息
+            if plant_count > 0 and results:
+                peak_heights = results.get('peak_densities') if method == 'density' else results.get('peak_heights')
+                if peak_heights is not None and len(peak_heights) > 0:
+                    all_heights.extend(peak_heights)
 
         # Tile 面积与汇总
         total_area += params["tile_size"] ** 2
@@ -192,12 +199,24 @@ def main():
 
     # Step 3: 汇总密度
     avg_density = total_plants / total_area if total_area > 0 else 0.0
+    
+    # 计算平均高度
+    if all_heights:
+        avg_height = np.mean(all_heights)
+        std_height = np.std(all_heights)
+        min_height = np.min(all_heights)
+        max_height = np.max(all_heights)
+    else:
+        avg_height = std_height = min_height = max_height = 0.0
 
     print("\n" + "="*60)
     print("处理完成 ✅")
     print(f"总检测作物数: {total_plants}")
     print(f"总面积: {total_area:.2f} m²")
     print(f"平均作物密度: {avg_density:.3f} 株/m²")
+    if all_heights:
+        print(f"平均高度: {avg_height:.3f} ± {std_height:.3f} m")
+        print(f"高度范围: [{min_height:.3f}, {max_height:.3f}] m")
     print(f"总耗时: {time.time() - t0:.2f}s")
     print("="*60)
 
@@ -211,6 +230,9 @@ def main():
         f.write(f"Total plants: {total_plants}\n")
         f.write(f"Total area: {total_area:.2f} m²\n")
         f.write(f"Average density: {avg_density:.3f} plants/m²\n")
+        if all_heights:
+            f.write(f"Average height: {avg_height:.3f} ± {std_height:.3f} m\n")
+            f.write(f"Height range: [{min_height:.3f}, {max_height:.3f}] m\n")
         f.write(f"Total time: {time.time() - t0:.2f}s\n\n")
         f.write("Per Tile Summary:\n")
         for tid, cnt in tile_summaries:
