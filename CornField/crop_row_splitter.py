@@ -1,0 +1,618 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+Crop Row Splitter
+简化版：从点云中检测作物行并分割保存每行的点云
+
+用法:
+    python crop_row_splitter.py input.las --tile_size 10
+"""
+
+import sys
+import numpy as np
+import laspy
+import matplotlib.pyplot as plt
+from pathlib import Path
+import time
+from scipy.stats import binned_statistic
+from scipy.signal import find_peaks
+from scipy.ndimage import gaussian_filter1d, gaussian_filter, distance_transform_edt, binary_dilation
+import shutil
+
+
+def read_las_file(las_path):
+    """读取LAS文件并返回点云坐标"""
+    print(f"读取点云文件: {las_path}")
+    t0 = time.time()
+    las = laspy.read(las_path)
+    
+    x = np.asarray(las.x, dtype=np.float32)
+    y = np.asarray(las.y, dtype=np.float32)
+    z = np.asarray(las.z, dtype=np.float32)
+    
+    print(f"点云总数: {len(x):,} 个点 (耗时: {time.time()-t0:.2f}秒)")
+    print(f"X范围: [{x.min():.3f}, {x.max():.3f}]")
+    print(f"Y范围: [{y.min():.3f}, {y.max():.3f}]")
+    print(f"Z范围: [{z.min():.3f}, {z.max():.3f}]")
+    
+    return x, y, z
+
+
+def save_las_file(x, y, z, output_path):
+    """保存点云为LAS文件"""
+    header = laspy.LasHeader(point_format=0, version="1.2")
+    header.scales = np.array([0.001, 0.001, 0.001])
+    header.offsets = np.array([x.min(), y.min(), z.min()])
+    
+    las = laspy.LasData(header)
+    las.x = x
+    las.y = y
+    las.z = z
+    
+    las.write(output_path)
+
+
+def normalize_z_to_zero(x, y, z):
+    """将点云Z轴标准化，使最低点位于z=0"""
+    z_min = z.min()
+    z_normalized = z - z_min
+    print(f"\nZ轴归一化: 最小值 {z_min:.3f} -> 0.000")
+    return x, y, z_normalized
+
+def split_into_tiles(x, y, z, tile_size=10.0):
+    """将点云分割成NxN米的tiles"""
+    print(f"\n分割成 {tile_size}x{tile_size}m tiles...")
+    
+    x_min, x_max = x.min(), x.max()
+    y_min, y_max = y.min(), y.max()
+    
+    n_tiles_x = int(np.ceil((x_max - x_min) / tile_size))
+    n_tiles_y = int(np.ceil((y_max - y_min) / tile_size))
+    
+    print(f"  田地范围: X=[{x_min:.2f}, {x_max:.2f}], Y=[{y_min:.2f}, {y_max:.2f}]")
+    print(f"  Tile网格: {n_tiles_x} x {n_tiles_y} = {n_tiles_x * n_tiles_y} tiles")
+    
+    tiles = {}
+    tile_info = {}
+    
+    for i in range(n_tiles_x):
+        for j in range(n_tiles_y):
+            tile_x_min = x_min + i * tile_size
+            tile_x_max = tile_x_min + tile_size
+            tile_y_min = y_min + j * tile_size
+            tile_y_max = tile_y_min + tile_size
+            
+            mask = (x >= tile_x_min) & (x < tile_x_max) & \
+                   (y >= tile_y_min) & (y < tile_y_max)
+            
+            if np.sum(mask) > 100:
+                tile_x = x[mask]
+                tile_y = y[mask]
+                tile_z = z[mask]
+                
+                tile_id = (i, j)
+                tiles[tile_id] = (tile_x, tile_y, tile_z)
+                tile_info[tile_id] = {
+                    'x_min': tile_x_min, 'x_max': tile_x_max,
+                    'y_min': tile_y_min, 'y_max': tile_y_max,
+                    'n_points': len(tile_x)
+                }
+    
+    print(f"  有效tiles: {len(tiles)} / {n_tiles_x * n_tiles_y}")
+    
+    return tiles, tile_info
+
+
+def compute_height_profile(coord, z, granularity=0.02):
+    """计算沿某个轴的平均高度分布"""
+    coord_min = coord.min()
+    coord_max = coord.max()
+    
+    bins = np.arange(coord_min, coord_max + granularity, granularity)
+    mean_heights, _, _ = binned_statistic(coord, z, statistic='mean', bins=bins)
+    bin_centers = bins[:-1] + granularity / 2
+    
+    return bin_centers, mean_heights
+
+
+def detect_crop_rows(centers, heights, sigma=5):
+    """
+    检测作物行peaks
+    
+    返回:
+        original_peaks: peak的索引
+        full_smoothed: 平滑后的完整数组
+        regularity_score: 间距规律度分数（0-1，越高越规律）
+    """
+    # 移除NaN
+    valid_mask = ~np.isnan(heights)
+    valid_heights = heights[valid_mask]
+    
+    if len(valid_heights) < 10:
+        return np.array([]), np.full_like(heights, np.nan), 0.0
+    
+    # 高斯平滑
+    smoothed = gaussian_filter1d(valid_heights, sigma=sigma)
+    
+    # 检测peaks
+    peaks, _ = find_peaks(smoothed, prominence=0.02, distance=10)
+    
+    if len(peaks) < 2:
+        return np.array([]), np.full_like(heights, np.nan), 0.0
+    
+    # 转换回原始索引
+    original_peaks = np.where(valid_mask)[0][peaks]
+    
+    # 同时返回平滑后的完整数组（用于可视化）
+    full_smoothed = np.full_like(heights, np.nan)
+    full_smoothed[valid_mask] = smoothed
+    
+    # 计算间距规律度
+    # 使用峰之间的间距的变异系数（CV）来评估规律度
+    # CV = std / mean，越小越规律
+    # regularity_score = 1 / (1 + CV)，范围0-1，越大越规律
+    
+    if len(peaks) >= 2:
+        # 计算峰间距
+        peak_positions = centers[original_peaks]
+        spacings = np.diff(peak_positions)
+        
+        if len(spacings) > 0:
+            mean_spacing = np.mean(spacings)
+            std_spacing = np.std(spacings)
+            
+            if mean_spacing > 0:
+                cv = std_spacing / mean_spacing  # 变异系数
+                regularity_score = 1.0 / (1.0 + cv)  # 转换为0-1分数，CV越小分数越高
+            else:
+                regularity_score = 0.0
+        else:
+            regularity_score = 0.0
+    else:
+        regularity_score = 0.0
+    
+    return original_peaks, full_smoothed, regularity_score
+
+
+def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
+                         y_centers, y_heights, y_peaks, y_smoothed,
+                         chosen_direction, output_prefix):
+    """绘制高度曲线图，只标记选中方向的peaks"""
+    fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+    
+    # X-axis height profile
+    ax1 = axes[0]
+    valid_x = ~np.isnan(x_heights)
+    ax1.plot(x_centers[valid_x], x_heights[valid_x], 'b-', 
+             linewidth=0.5, alpha=0.3, label='Raw data')
+    
+    valid_smooth_x = ~np.isnan(x_smoothed)
+    ax1.plot(x_centers[valid_smooth_x], x_smoothed[valid_smooth_x], 'b-', 
+             linewidth=1, alpha=0.8, label='Smoothed')
+    
+    # 只有当X是选中方向时才标记peaks
+    if chosen_direction == 'x' and len(x_peaks) > 0:
+        ax1.plot(x_centers[x_peaks], x_heights[x_peaks], 'rx', 
+                markersize=8, markeredgewidth=2, label=f'Detected Rows (n={len(x_peaks)})')
+    
+    ax1.set_xlabel('X Coordinate (m)', fontsize=12)
+    ax1.set_ylabel('Mean Height (m)', fontsize=12)
+    title = f'X-axis: {len(x_peaks)} rows detected'
+    if chosen_direction == 'x':
+        title += ' [SELECTED]'
+    ax1.set_title(title, fontsize=13, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+    ax1.legend(loc='upper right', fontsize=10)
+    
+    # Y-axis height profile
+    ax2 = axes[1]
+    valid_y = ~np.isnan(y_heights)
+    ax2.plot(y_centers[valid_y], y_heights[valid_y], 'g-', 
+             linewidth=0.5, alpha=0.3, label='Raw data')
+    
+    valid_smooth_y = ~np.isnan(y_smoothed)
+    ax2.plot(y_centers[valid_smooth_y], y_smoothed[valid_smooth_y], 'g-', 
+             linewidth=1, alpha=0.8, label='Smoothed')
+    
+    # 只有当Y是选中方向时才标记peaks
+    if chosen_direction == 'y' and len(y_peaks) > 0:
+        ax2.plot(y_centers[y_peaks], y_heights[y_peaks], 'rx', 
+                markersize=8, markeredgewidth=2, label=f'Detected Rows (n={len(y_peaks)})')
+    
+    ax2.set_xlabel('Y Coordinate (m)', fontsize=12)
+    ax2.set_ylabel('Mean Height (m)', fontsize=12)
+    title = f'Y-axis: {len(y_peaks)} rows detected'
+    if chosen_direction == 'y':
+        title += ' [SELECTED]'
+    ax2.set_title(title, fontsize=13, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(loc='upper right', fontsize=10)
+    
+    plt.tight_layout()
+    
+    output_file = f"{output_prefix}_height_profiles.png"
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    print(f"  高度曲线图已保存: {output_file}")
+
+
+def create_chm_visualization(x, y, z, x_centers, x_peaks, y_centers, y_peaks,
+                            chosen_direction, resolution, output_prefix):
+    """生成CHM并只标记选中方向的rows"""
+    print("  生成CHM可视化...")
+    t0 = time.time()
+    
+    # 创建2D网格
+    x_min, x_max = x.min(), x.max()
+    y_min, y_max = y.min(), y.max()
+    
+    nx = int(np.ceil((x_max - x_min) / resolution))
+    ny = int(np.ceil((y_max - y_min) / resolution))
+    
+    # 创建CHM（使用最大高度）
+    chm = np.full((ny, nx), np.nan)
+    
+    x_idx = ((x - x_min) / resolution).astype(int)
+    y_idx = ((y - y_min) / resolution).astype(int)
+    
+    x_idx = np.clip(x_idx, 0, nx - 1)
+    y_idx = np.clip(y_idx, 0, ny - 1)
+    
+    for i in range(len(x)):
+        if np.isnan(chm[y_idx[i], x_idx[i]]) or z[i] > chm[y_idx[i], x_idx[i]]:
+            chm[y_idx[i], x_idx[i]] = z[i]
+    
+    # 填充空白并平滑
+    mask = ~np.isnan(chm)
+    valid_count = np.sum(mask)
+    
+    if valid_count > 0:
+        indices = distance_transform_edt(~mask, return_distances=False, return_indices=True)
+        chm_filled = chm[tuple(indices)]
+        chm_smoothed = gaussian_filter(chm_filled, sigma=2.5, mode='nearest')
+        dilated_mask = binary_dilation(mask, iterations=5)
+        chm_smoothed[~dilated_mask] = np.nan
+    else:
+        chm_smoothed = chm
+    
+    # 创建figure
+    fig, ax = plt.subplots(1, 1, figsize=(16, 14))
+    
+    # 显示CHM
+    im = ax.imshow(chm_smoothed, extent=[x_min, x_max, y_min, y_max], 
+                   origin='lower', cmap='terrain', aspect='auto', 
+                   interpolation='bilinear', alpha=0.9)
+    
+    # 只叠加选中方向的rows
+    if chosen_direction == 'x' and len(x_peaks) > 0:
+        for peak_idx in x_peaks:
+            x_pos = x_centers[peak_idx]
+            ax.axvline(x=x_pos, color='red', linewidth=1.5, alpha=0.8, linestyle='-')
+        direction_label = f'X-axis rows (n={len(x_peaks)}) [SELECTED]'
+        row_count_str = f'{len(x_peaks)} X-rows'
+    elif chosen_direction == 'y' and len(y_peaks) > 0:
+        for peak_idx in y_peaks:
+            y_pos = y_centers[peak_idx]
+            ax.axhline(y=y_pos, color='cyan', linewidth=1.5, alpha=0.8, linestyle='-')
+        direction_label = f'Y-axis rows (n={len(y_peaks)}) [SELECTED]'
+        row_count_str = f'{len(y_peaks)} Y-rows'
+    else:
+        direction_label = 'No rows detected'
+        row_count_str = '0 rows'
+    
+    ax.set_xlabel('X Coordinate (m)', fontsize=13)
+    ax.set_ylabel('Y Coordinate (m)', fontsize=13)
+    ax.set_title(f'Canopy Height Model with Detected Crop Rows\n{row_count_str}',
+                 fontsize=14, fontweight='bold', pad=15)
+    
+    # Colorbar
+    cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label('Height (m)', fontsize=12)
+    
+    # 图例
+    from matplotlib.lines import Line2D
+    if chosen_direction == 'x':
+        legend_elements = [
+            Line2D([0], [0], color='red', linewidth=2.5, label=direction_label)
+        ]
+    elif chosen_direction == 'y':
+        legend_elements = [
+            Line2D([0], [0], color='cyan', linewidth=2.5, label=direction_label)
+        ]
+    else:
+        legend_elements = []
+    
+    if legend_elements:
+        ax.legend(handles=legend_elements, loc='upper right', fontsize=11, 
+                 framealpha=0.9, edgecolor='black')
+    
+    ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
+    
+    plt.tight_layout()
+    
+    output_file = f"{output_prefix}_chm.png"
+    plt.savefig(output_file, dpi=600, bbox_inches='tight')
+    plt.close(fig)
+    
+    print(f"  CHM已保存: {output_file} (耗时: {time.time()-t0:.2f}s)")
+
+
+def calculate_row_boundaries(row_positions):
+    """
+    计算每个row的边界（中心到相邻row中点，再乘以90%）
+    
+    参数:
+        row_positions: 排序后的row中心位置列表
+    
+    返回:
+        boundaries: [(min, max), ...] 每个row的边界
+    """
+    if len(row_positions) == 0:
+        return []
+    
+    boundaries = []
+    
+    for i, pos in enumerate(row_positions):
+        if i == 0:
+            # 第一个row：左边界是到第二个row中点
+            if len(row_positions) > 1:
+                right_mid = (pos + row_positions[i+1]) / 2
+                left_edge = pos - (right_mid - pos)  # 对称
+                right_edge = right_mid
+            else:
+                # 只有一个row，无法确定边界
+                left_edge = pos - 0.2
+                right_edge = pos + 0.2
+        elif i == len(row_positions) - 1:
+            # 最后一个row：右边界是到前一个row中点
+            left_mid = (row_positions[i-1] + pos) / 2
+            left_edge = left_mid
+            right_edge = pos + (pos - left_mid)  # 对称
+        else:
+            # 中间的row
+            left_mid = (row_positions[i-1] + pos) / 2
+            right_mid = (pos + row_positions[i+1]) / 2
+            left_edge = left_mid
+            right_edge = right_mid
+        
+        # 缩小到90%
+        center = pos
+        half_width = (right_edge - left_edge) / 2
+        boundaries.append((
+            center - half_width * 0.9,
+            center + half_width * 0.9
+        ))
+    
+    return boundaries
+
+
+def split_and_save_rows(tile_x, tile_y, tile_z, row_centers, row_direction, 
+                        output_dir, tile_id):
+    """
+    分割并保存每个row的点云
+    
+    参数:
+        tile_x, tile_y, tile_z: tile点云
+        row_centers: row中心位置（已排序）
+        row_direction: 'x' 或 'y'
+        output_dir: 输出目录
+        tile_id: tile ID
+    """
+    print(f"  分割 {len(row_centers)} 个 {row_direction.upper()}-方向的rows...")
+    
+    # 计算边界
+    boundaries = calculate_row_boundaries(row_centers)
+    
+    # 选择坐标轴
+    if row_direction == 'x':
+        coord = tile_x
+    else:
+        coord = tile_y
+    
+    # 保存每个row
+    for i, (row_pos, (min_bound, max_bound)) in enumerate(zip(row_centers, boundaries), 1):
+        # 筛选该row内的点
+        mask = (coord >= min_bound) & (coord <= max_bound)
+        row_point_count = np.sum(mask)
+        
+        if row_point_count < 10:
+            print(f"    Row {i}: 点数太少 ({row_point_count}), 跳过")
+            continue
+        
+        row_x = tile_x[mask]
+        row_y = tile_y[mask]
+        row_z = tile_z[mask]
+        
+        # 保存LAS文件
+        row_filename = f"row_{row_direction}{i:02d}_at_{row_pos:.2f}m.las"
+        row_path = output_dir / row_filename
+        save_las_file(row_x, row_y, row_z, row_path)
+        
+        width = max_bound - min_bound
+        print(f"    Row {i}: 位置={row_pos:.2f}m, 范围=[{min_bound:.2f}, {max_bound:.2f}]m "
+              f"(宽度={width:.2f}m), 点数={row_point_count:,}")
+
+
+def process_single_tile(tile_id, tile_x, tile_y, tile_z, tile_info, output_dir):
+    """处理单个tile：检测rows并分割保存"""
+    i, j = tile_id
+    print(f"\n{'='*50}")
+    print(f"处理 Tile ({i}, {j}) - {tile_info['n_points']:,} 点")
+    print(f"{'='*50}")
+    
+    # 创建tile输出目录
+    tile_dir = output_dir / f"tile_{i}_{j}"
+    tile_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 保存tile完整点云
+    tile_las_path = tile_dir / f"tile_{i}_{j}_full.las"
+    save_las_file(tile_x, tile_y, tile_z, tile_las_path)
+    print(f"  已保存完整tile: {tile_las_path.name}")
+    
+    granularity = 0.02  # 2cm
+    
+    # X轴分析
+    print("  检测X轴方向的rows...")
+    x_centers, x_heights = compute_height_profile(tile_x, tile_z, granularity)
+    x_peaks, x_smoothed, x_regularity = detect_crop_rows(x_centers, x_heights, sigma=int(0.05/granularity))
+    x_row_count = len(x_peaks)
+    print(f"    -> 检测到 {x_row_count} 个X-方向rows, 规律度={x_regularity:.3f}")
+    
+    # Y轴分析
+    print("  检测Y轴方向的rows...")
+    y_centers, y_heights = compute_height_profile(tile_y, tile_z, granularity)
+    y_peaks, y_smoothed, y_regularity = detect_crop_rows(y_centers, y_heights, sigma=int(0.05/granularity))
+    y_row_count = len(y_peaks)
+    print(f"    -> 检测到 {y_row_count} 个Y-方向rows, 规律度={y_regularity:.3f}")
+    
+    # 选择间距最规律的方向（规律度分数最高）
+    if x_row_count == 0 and y_row_count == 0:
+        print("  警告: 未检测到任何rows")
+        return {
+            'tile_id': tile_id,
+            'direction': None,
+            'row_count': 0,
+            'regularity': 0.0
+        }
+    
+    # 如果只有一个方向检测到rows，选择那个方向
+    if x_row_count == 0:
+        chosen_direction = 'y'
+        row_positions = y_centers[y_peaks]
+        row_count = y_row_count
+        chosen_regularity = y_regularity
+    elif y_row_count == 0:
+        chosen_direction = 'x'
+        row_positions = x_centers[x_peaks]
+        row_count = x_row_count
+        chosen_regularity = x_regularity
+    else:
+        # 两个方向都有rows，选择规律度高的
+        if x_regularity >= y_regularity:
+            chosen_direction = 'x'
+            row_positions = x_centers[x_peaks]
+            row_count = x_row_count
+            chosen_regularity = x_regularity
+            print(f"  → X方向规律度更高 ({x_regularity:.3f} vs {y_regularity:.3f})")
+        else:
+            chosen_direction = 'y'
+            row_positions = y_centers[y_peaks]
+            row_count = y_row_count
+            chosen_regularity = y_regularity
+            print(f"  → Y方向规律度更高 ({y_regularity:.3f} vs {x_regularity:.3f})")
+    
+    print(f"\n  选择 {chosen_direction.upper()}-方向进行分割 ({row_count} rows, 规律度={chosen_regularity:.3f})")
+    
+    # 生成可视化
+    output_prefix = str(tile_dir / f"tile_{i}_{j}")
+    
+    print("  生成高度曲线图...")
+    plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
+                        y_centers, y_heights, y_peaks, y_smoothed,
+                        chosen_direction, output_prefix)
+    
+    print("  生成CHM可视化...")
+    create_chm_visualization(tile_x, tile_y, tile_z,
+                            x_centers, x_peaks, y_centers, y_peaks,
+                            chosen_direction, granularity, output_prefix)
+    
+    # 分割并保存rows
+    split_and_save_rows(tile_x, tile_y, tile_z, row_positions, 
+                       chosen_direction, tile_dir, tile_id)
+    
+    return {
+        'tile_id': tile_id,
+        'direction': chosen_direction,
+        'row_count': row_count,
+        'regularity': chosen_regularity
+    }
+
+
+def main():
+    """主函数"""
+    if len(sys.argv) < 2:
+        print("用法: python crop_row_splitter.py <las文件路径> [选项]")
+        print("示例: python crop_row_splitter.py input.las --tile_size 10")
+        sys.exit(1)
+    
+    las_path = sys.argv[1]
+    
+    # 解析参数
+    tile_size = 10.0  # 默认10x10m
+    if '--tile_size' in sys.argv:
+        idx = sys.argv.index('--tile_size')
+        if idx + 1 < len(sys.argv):
+            tile_size = float(sys.argv[idx + 1])
+    
+    if not Path(las_path).exists():
+        print(f"错误: 文件不存在: {las_path}")
+        sys.exit(1)
+    
+    print("="*60)
+    print("作物行分割器 - Row Point Cloud Splitter")
+    print("="*60)
+    total_t0 = time.time()
+    
+    # 创建输出目录
+    output_base = Path("row_split_output")
+    if output_base.exists():
+        shutil.rmtree(output_base)
+    output_base.mkdir(parents=True, exist_ok=True)
+    
+    # 1. 读取点云
+    x, y, z = read_las_file(las_path)
+    
+    # 2. 标准化Z轴
+    x, y, z = normalize_z_to_zero(x, y, z)
+
+    # 4. 分割成tiles
+    tiles, tile_info = split_into_tiles(x, y, z, tile_size=tile_size)
+    
+    # 5. 处理每个tile
+    all_stats = []
+    
+    for tile_id, (tile_x, tile_y, tile_z) in tiles.items():
+        stats = process_single_tile(tile_id, tile_x, tile_y, tile_z, 
+                                    tile_info[tile_id], output_base)
+        all_stats.append(stats)
+    
+    # 6. 生成总结报告
+    print("\n" + "="*60)
+    print("处理总结")
+    print("="*60)
+    
+    total_rows = sum(s['row_count'] for s in all_stats)
+    x_tiles = sum(1 for s in all_stats if s['direction'] == 'x')
+    y_tiles = sum(1 for s in all_stats if s['direction'] == 'y')
+    
+    print(f"处理tiles: {len(all_stats)}")
+    print(f"总分割rows: {total_rows}")
+    print(f"X-方向tiles: {x_tiles}")
+    print(f"Y-方向tiles: {y_tiles}")
+    print(f"输出目录: {output_base.absolute()}")
+    
+    # 保存summary
+    summary_file = output_base / "summary.txt"
+    with open(summary_file, 'w') as f:
+        f.write("Crop Row Splitting Summary\n")
+        f.write("="*60 + "\n\n")
+        f.write(f"Input file: {las_path}\n")
+        f.write(f"Tile size: {tile_size}x{tile_size}m\n")
+        f.write(f"Total tiles processed: {len(all_stats)}\n")
+        f.write(f"Total rows split: {total_rows}\n")
+        f.write(f"Selection criterion: Peak spacing regularity (higher is better)\n\n")
+        
+        for stats in all_stats:
+            i, j = stats['tile_id']
+            direction = stats['direction'] or 'none'
+            regularity = stats.get('regularity', 0.0)
+            f.write(f"Tile ({i},{j}): direction={direction.upper()}, "
+                   f"rows={stats['row_count']}, regularity={regularity:.3f}\n")
+    
+    total_time = time.time() - total_t0
+    print(f"\n✓ 处理完成！总耗时: {total_time:.2f}秒")
+    print("="*60)
+
+
+if __name__ == "__main__":
+    main()

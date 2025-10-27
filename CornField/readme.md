@@ -19,7 +19,21 @@ python crop_row.py soybean.las
 cd C:/ForestNet/Cornfield
 conda activate corn-density-env
 python crop_row_finder.py soybean.las
+python crop_row_finder.py morrow_plots.las
+python crop_row_splitter.py soybean.las  
+python density_based_counter.py row_split_output\tile_0_4\row_y08_at_25.75m.las --direction x --output row_split_output\tile_0_4\row_y08_density
 
+## New New New pipeline
+cd C:/ForestNet/Cornfield
+conda activate corn-density-env
 
+# Density-based方法
+python crop_pipeline.py corn.las --method density
+
+# Height-based方法
+python crop_pipeline.py corn.las --method height
+
+# 使用自定义配置
+python crop_pipeline.py corn.las --method density --config my_config.yaml
 
 

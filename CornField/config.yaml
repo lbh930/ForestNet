@@ -1,0 +1,54 @@
+# 配置文件: config.yaml
+# 用于指定不同方法下的参数设置
+
+density:
+  tile_size: 10.0
+  expected_spacing: 0.08
+  bin_size: 0.005
+  min_prominence: 0.02
+  remove_ground: true
+  ground_percentile: 30
+  top_percentile: 30
+  apply_sor: true
+  sor_k: 20
+  sor_std_ratio: 2.0
+
+height:
+  tile_size: 10.0
+  expected_spacing: 0.08
+  bin_size: 0.005
+  min_prominence: 0.02
+  height_metric: max  # 可选: max | mean | percentile_95
+  remove_ground: true
+  ground_percentile: 30
+  top_percentile: 30
+  apply_sor: true
+  sor_k: 20
+  sor_std_ratio: 2.0
+# 配置文件: config.yaml
+# 用于指定不同方法下的参数设置
+
+density:
+  tile_size: 10.0
+  expected_spacing: 0.08
+  bin_size: 0.005
+  min_prominence: 0.02
+  remove_ground: true
+  ground_percentile: 30
+  top_percentile: 30
+  apply_sor: true
+  sor_k: 20
+  sor_std_ratio: 2.0
+
+height:
+  tile_size: 10.0
+  expected_spacing: 0.08
+  bin_size: 0.005
+  min_prominence: 0.02
+  height_metric: max  # 可选: max | mean | percentile_95
+  remove_ground: true
+  ground_percentile: 30
+  top_percentile: 30
+  apply_sor: true
+  sor_k: 20
+  sor_std_ratio: 2.0
