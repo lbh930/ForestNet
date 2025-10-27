@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
+from common import save_detection_summary_yaml
 
 
 def remove_ground_points(points, bottom_percentile, top_percentile):
@@ -337,7 +338,7 @@ def visualize_3d_with_peaks(points, peak_positions, direction, output_path):
 def density_count_from_row(points, direction, expected_spacing, 
                            bin_size, apply_sor, sor_k, sor_std_ratio,
                            remove_ground, ground_percentile, top_percentile,
-                           min_prominence, output_dir):
+                           min_prominence, output_dir, row_center=None):
     """
     从单行点云中基于密度检测并计数植物
     
@@ -354,6 +355,7 @@ def density_count_from_row(points, direction, expected_spacing,
         top_percentile: 移除顶部百分比
         min_prominence: 最小峰突出度（相对值）
         output_dir: 可视化输出目录
+        row_center: 行的中心坐标（用于计算完整XY坐标），如果为None则使用点云均值
     
     返回:
         plant_count: 检测到的植物数量
@@ -413,31 +415,54 @@ def density_count_from_row(points, direction, expected_spacing,
         cloud_path = output_dir / f"3d_pointcloud_{direction}.png"
         visualize_3d_with_peaks(points, peak_positions, direction, cloud_path)
         
-        # 保存结果到文本文件
-        summary_path = output_dir / "detection_summary.txt"
-        with open(summary_path, 'w', encoding='utf-8') as f:
-            f.write("Plant Detection Summary\n")
-            f.write("="*60 + "\n\n")
-            f.write(f"Input points: {len(points):,}\n")
-            f.write(f"Direction: {direction.upper()}-axis\n")
-            f.write(f"Expected spacing: {expected_spacing*100:.0f} cm\n")
-            f.write(f"Bin size: {bin_size*100:.1f} cm\n")
-            f.write(f"Ground removal: {remove_ground} (bottom {ground_percentile}%, top {top_percentile}%)\n")
-            f.write(f"SOR applied: {apply_sor}\n\n")
-            f.write(f"Detected plants: {plant_count}\n\n")
+        # 保存结果为YAML文件
+        summary_path = output_dir / "detection_summary.yaml"
+        
+        # 确定行的中心坐标
+        if row_center is None:
+            # 使用点云的垂直于检测方向的均值作为行中心
+            if direction == 'x':
+                row_center = points[:, 0].mean()  # X方向的行，取X均值
+            else:
+                row_center = points[:, 1].mean()  # Y方向的行，取Y均值
+        
+        # 构建植物列表（包含完整XY坐标）
+        plants = []
+        for i, (pos, density) in enumerate(zip(peak_positions, peak_densities), 1):
+            if direction == 'x':
+                # 沿X方向检测，pos是X坐标，Y是行中心
+                x_coord = float(pos)
+                y_coord = float(row_center)
+            else:
+                # 沿Y方向检测，pos是Y坐标，X是行中心
+                x_coord = float(row_center)
+                y_coord = float(pos)
             
-            if plant_count > 0:
-                f.write("Plant Positions:\n")
-                for i, pos in enumerate(peak_positions, 1):
-                    f.write(f"  Plant {i}: {pos:.3f} m\n")
-                
-                if plant_count > 1:
-                    spacings = np.diff(peak_positions)
-                    f.write(f"\nSpacing statistics:\n")
-                    f.write(f"  Mean: {spacings.mean()*100:.1f} cm\n")
-                    f.write(f"  Std:  {spacings.std()*100:.1f} cm\n")
-                    f.write(f"  Min:  {spacings.min()*100:.1f} cm\n")
-                    f.write(f"  Max:  {spacings.max()*100:.1f} cm\n")
+            plants.append({
+                'id': i,
+                'x': x_coord,
+                'y': y_coord,
+                'height': float(density),  # 对于density-based，这里是density值
+            })
+        
+        # 构建summary数据
+        summary_data = {
+            'method': 'density',
+            'input_points': len(points),
+            'direction': direction,
+            'expected_spacing_cm': expected_spacing * 100,
+            'bin_size_cm': bin_size * 100,
+            'ground_removal': remove_ground,
+            'ground_percentile': ground_percentile,
+            'top_percentile': top_percentile,
+            'sor_applied': apply_sor,
+            'sor_k': sor_k,
+            'sor_std_ratio': sor_std_ratio,
+            'plant_count': plant_count,
+            'plants': plants,
+        }
+        
+        save_detection_summary_yaml(summary_path, summary_data)
         
         print(f"\n结果已保存到: {output_dir}")
     

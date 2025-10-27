@@ -60,20 +60,25 @@ def normalize_z_to_zero(x, y, z):
     return x, y, z_normalized
 
 def split_into_tiles(x, y, z, tile_size=10.0):
-    """将点云分割成NxN米的tiles"""
+    """将点云分割成NxN米的tiles，自动跳过尺寸不足的边缘tile"""
     print(f"\n分割成 {tile_size}x{tile_size}m tiles...")
     
     x_min, x_max = x.min(), x.max()
     y_min, y_max = y.min(), y.max()
     
-    n_tiles_x = int(np.ceil((x_max - x_min) / tile_size))
-    n_tiles_y = int(np.ceil((y_max - y_min) / tile_size))
+    x_range = x_max - x_min
+    y_range = y_max - y_min
     
-    print(f"  田地范围: X=[{x_min:.2f}, {x_max:.2f}], Y=[{y_min:.2f}, {y_max:.2f}]")
+    n_tiles_x = int(np.ceil(x_range / tile_size))
+    n_tiles_y = int(np.ceil(y_range / tile_size))
+    
+    print(f"  田地范围: X=[{x_min:.2f}, {x_max:.2f}] ({x_range:.2f}m), "
+          f"Y=[{y_min:.2f}, {y_max:.2f}] ({y_range:.2f}m)")
     print(f"  Tile网格: {n_tiles_x} x {n_tiles_y} = {n_tiles_x * n_tiles_y} tiles")
     
     tiles = {}
     tile_info = {}
+    skipped_tiles = 0
     
     for i in range(n_tiles_x):
         for j in range(n_tiles_y):
@@ -81,6 +86,15 @@ def split_into_tiles(x, y, z, tile_size=10.0):
             tile_x_max = tile_x_min + tile_size
             tile_y_min = y_min + j * tile_size
             tile_y_max = tile_y_min + tile_size
+            
+            # 计算实际tile尺寸（考虑边界）
+            actual_x_size = min(tile_x_max, x_max) - tile_x_min
+            actual_y_size = min(tile_y_max, y_max) - tile_y_min
+            
+            # 跳过尺寸不足的tile（小于标准tile尺寸的80%）
+            if actual_x_size < tile_size * 0.8 or actual_y_size < tile_size * 0.5:
+                skipped_tiles += 1
+                continue
             
             mask = (x >= tile_x_min) & (x < tile_x_max) & \
                    (y >= tile_y_min) & (y < tile_y_max)
@@ -98,7 +112,8 @@ def split_into_tiles(x, y, z, tile_size=10.0):
                     'n_points': len(tile_x)
                 }
     
-    print(f"  有效tiles: {len(tiles)} / {n_tiles_x * n_tiles_y}")
+    print(f"  有效tiles: {len(tiles)} / {n_tiles_x * n_tiles_y} "
+          f"(跳过尺寸不足: {skipped_tiles}, 点数不足: {n_tiles_x * n_tiles_y - len(tiles) - skipped_tiles})")
     
     return tiles, tile_info
 
@@ -178,7 +193,14 @@ def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
                          y_centers, y_heights, y_peaks, y_smoothed,
                          chosen_direction, output_prefix):
     """绘制高度曲线图，只标记选中方向的peaks"""
-    fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+    # 计算X和Y的实际范围比例
+    x_range = x_centers.max() - x_centers.min() if len(x_centers) > 0 else 1
+    y_range = y_centers.max() - y_centers.min() if len(y_centers) > 0 else 1
+    
+    # 设置子图宽度比例，使其与数据范围成正比
+    width_ratios = [x_range, y_range]
+    
+    fig, axes = plt.subplots(1, 2, figsize=(18, 6), gridspec_kw={'width_ratios': width_ratios})
     
     # X-axis height profile
     ax1 = axes[0]
@@ -275,12 +297,29 @@ def create_chm_visualization(x, y, z, x_centers, x_peaks, y_centers, y_peaks,
     else:
         chm_smoothed = chm
     
-    # 创建figure
-    fig, ax = plt.subplots(1, 1, figsize=(16, 14))
+    # 计算实际宽高比
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+    aspect_ratio = y_range / x_range
     
-    # 显示CHM
+    # 根据比例调整figure大小（基准宽度16英寸）
+    fig_width = 16
+    fig_height = fig_width * aspect_ratio
+    
+    # 限制高度范围
+    if fig_height > 20:
+        fig_height = 20
+        fig_width = fig_height / aspect_ratio
+    elif fig_height < 8:
+        fig_height = 8
+        fig_width = fig_height / aspect_ratio
+    
+    # 创建figure
+    fig, ax = plt.subplots(1, 1, figsize=(fig_width, fig_height))
+    
+    # 显示CHM，设置aspect='equal'保持真实比例
     im = ax.imshow(chm_smoothed, extent=[x_min, x_max, y_min, y_max], 
-                   origin='lower', cmap='terrain', aspect='auto', 
+                   origin='lower', cmap='terrain', aspect='equal', 
                    interpolation='bilinear', alpha=0.9)
     
     # 只叠加选中方向的rows

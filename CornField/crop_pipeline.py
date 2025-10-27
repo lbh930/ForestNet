@@ -114,6 +114,9 @@ def main():
     total_plants = 0
     total_area = 0.0
 
+    # 用于记录每个 tile 的汇总
+    tile_summaries = []
+
     # Step 2: 处理每个 tile
     for tile_id, (tile_x, tile_y, tile_z) in tiles.items():
         stats = splitter.process_single_tile(tile_id, tile_x, tile_y, tile_z, 
@@ -123,6 +126,8 @@ def main():
 
         tile_dir = output_base / f"tile_{tile_id[0]}_{tile_id[1]}"
         chosen_dir = tile_dir.glob("row_*.las")
+
+        tile_plant_count = 0
 
         for row_path in chosen_dir:
             row_name = row_path.stem  # 比如 "row_y01_at_12.34m"
@@ -134,21 +139,18 @@ def main():
             row_output_dir = tile_dir / "count_results" / row_name
             row_output_dir.mkdir(parents=True, exist_ok=True)
 
-            if stats['direction'] == 'x':
-                count_direction = 'y'
-            else:
-                count_direction = 'x'
-
             # ✅ 修正：计数方向应与行方向垂直
-            if stats['direction'] == 'x':
-                count_direction = 'y'
-            else:
-                count_direction = 'x'
+            count_direction = 'y' if stats['direction'] == 'x' else 'x'
+            
+            # 从文件名中提取行中心坐标 (例如 "row_y01_at_12.34m" -> 12.34)
+            import re
+            match = re.search(r'at_([-\d.]+)m', row_name)
+            row_center = float(match.group(1)) if match else None
 
             if method == 'density':
                 plant_count, _, _ = density_counter.density_count_from_row(
                     points,
-                    direction=count_direction,   # ✅ 使用反方向
+                    direction=count_direction,
                     expected_spacing=params["expected_spacing"],
                     bin_size=params["bin_size"],
                     apply_sor=params["apply_sor"],
@@ -158,12 +160,13 @@ def main():
                     ground_percentile=params["ground_percentile"],
                     top_percentile=params["top_percentile"],
                     min_prominence=params["min_prominence"],
-                    output_dir=row_output_dir
+                    output_dir=row_output_dir,
+                    row_center=row_center
                 )
             else:
                 plant_count, _, _ = height_counter.height_count_from_row(
                     points,
-                    direction=count_direction,   # ✅ 使用反方向
+                    direction=count_direction,
                     expected_spacing=params["expected_spacing"],
                     bin_size=params["bin_size"],
                     apply_sor=params["apply_sor"],
@@ -174,12 +177,18 @@ def main():
                     top_percentile=params["top_percentile"],
                     min_prominence=params["min_prominence"],
                     height_metric=params["height_metric"],
-                    output_dir=row_output_dir
+                    output_dir=row_output_dir,
+                    row_center=row_center
                 )
 
+            # ✅ 修复：累加计数
+            total_plants += plant_count
+            tile_plant_count += plant_count
 
-        # Tile 面积
+        # Tile 面积与汇总
         total_area += params["tile_size"] ** 2
+        tile_summaries.append((tile_id, tile_plant_count))
+        print(f"[Tile {tile_id}] 检测完成，共检测到 {tile_plant_count} 株植物。")
 
     # Step 3: 汇总密度
     avg_density = total_plants / total_area if total_area > 0 else 0.0
@@ -193,7 +202,8 @@ def main():
     print("="*60)
 
     # 输出summary文件
-    with open("crop_density_summary.txt", "w", encoding="utf-8") as f:
+    summary_path = output_base / "crop_density_summary.txt"
+    with open(summary_path, "w", encoding="utf-8") as f:
         f.write("Crop Density Summary\n")
         f.write("="*60 + "\n")
         f.write(f"Input file: {las_path}\n")
@@ -201,9 +211,12 @@ def main():
         f.write(f"Total plants: {total_plants}\n")
         f.write(f"Total area: {total_area:.2f} m²\n")
         f.write(f"Average density: {avg_density:.3f} plants/m²\n")
-        f.write(f"Total time: {time.time() - t0:.2f}s\n")
+        f.write(f"Total time: {time.time() - t0:.2f}s\n\n")
+        f.write("Per Tile Summary:\n")
+        for tid, cnt in tile_summaries:
+            f.write(f"  Tile {tid}: {cnt} plants\n")
 
-    print("结果已写入 crop_density_summary.txt")
+    print(f"结果已写入 {summary_path}")
 
 
 if __name__ == "__main__":

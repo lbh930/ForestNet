@@ -28,12 +28,19 @@ cd C:/ForestNet/Cornfield
 conda activate corn-density-env
 
 # Density-based方法
-python crop_pipeline.py corn.las --method density
+python crop_pipeline.py data/ifarm_corn.las --method density
 
 # Height-based方法
-python crop_pipeline.py corn.las --method height
+python crop_pipeline.py data/ifarm_soybean_2.las --method height
 
 # 使用自定义配置
 python crop_pipeline.py corn.las --method density --config my_config.yaml
+
+# Visualize Result
+# 基本用法
+python visualize_result.py corn.las row_split_output/corn/ result.png
+
+# 完整路径示例
+python visualize_result.py data/ifarm_soybean_2.las row_split_output\ifarm_soybean_2 visualization.png
 
 
