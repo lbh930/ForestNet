@@ -513,6 +513,23 @@ def process_single_tile(tile_id, tile_x, tile_y, tile_z, tile_info, output_dir):
             'row_count': 0,
             'regularity': 0.0
         }
+
+    if x_row_count <= 3:
+        print(f"  X方向row过少 ({x_row_count} ≤ 3)，忽略该方向")
+        x_row_count = 0
+    if y_row_count <= 3:
+        print(f"  Y方向row过少 ({y_row_count} ≤ 3)，忽略该方向")
+        y_row_count = 0
+
+    # 若两个方向都无效
+    if x_row_count == 0 and y_row_count == 0:
+        print("  跳过：两个方向都未检测到足够的rows")
+        return {
+            'tile_id': tile_id,
+            'direction': None,
+            'row_count': 0,
+            'regularity': 0.0
+        }
     
     # 如果只有一个方向检测到rows，选择那个方向
     if x_row_count == 0:

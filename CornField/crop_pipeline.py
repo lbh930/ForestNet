@@ -126,11 +126,11 @@ def main():
             continue
 
         tile_dir = output_base / f"tile_{tile_id[0]}_{tile_id[1]}"
-        chosen_dir = tile_dir.glob("row_*.las")
+        rows = sorted(list(tile_dir.glob("row_*.las")))
 
         tile_plant_count = 0
 
-        for row_path in chosen_dir:
+        for idx, row_path in enumerate(rows, 1):
             row_name = row_path.stem  # 比如 "row_y01_at_12.34m"
             points = read_las_points(row_path)
             if len(points) < 50:
@@ -148,6 +148,9 @@ def main():
             match = re.search(r'at_([-\d.]+)m', row_name)
             row_center = float(match.group(1)) if match else None
 
+            # 行状态文案（最简每行一条）
+            row_status = f"tile: {tile_id} row ({idx}/{len(rows)}) completed"
+
             if method == 'density':
                 plant_count, _, results = density_counter.density_count_from_row(
                     points,
@@ -162,7 +165,9 @@ def main():
                     top_percentile=params["top_percentile"],
                     min_prominence=params["min_prominence"],
                     output_dir=row_output_dir,
-                    row_center=row_center
+                    row_center=row_center,
+                    row_status=row_status,
+                    verbose=False
                 )
             else:
                 plant_count, _, results = height_counter.height_count_from_row(
@@ -179,7 +184,9 @@ def main():
                     min_prominence=params["min_prominence"],
                     height_metric=params["height_metric"],
                     output_dir=row_output_dir,
-                    row_center=row_center
+                    row_center=row_center,
+                    row_status=row_status,
+                    verbose=False
                 )
 
             # ✅ 修复：累加计数
@@ -188,9 +195,12 @@ def main():
             
             # 收集高度信息
             if plant_count > 0 and results:
-                peak_heights = results.get('peak_densities') if method == 'density' else results.get('peak_heights')
-                if peak_heights is not None and len(peak_heights) > 0:
-                    all_heights.extend(peak_heights)
+                # 优先使用实际高度，其次回退到旧键以兼容
+                heights = results.get('actual_heights')
+                if (heights is None or len(heights) == 0):
+                    heights = results.get('peak_densities') if method == 'density' else results.get('peak_heights')
+                if heights is not None and len(heights) > 0:
+                    all_heights.extend(heights)
 
         # Tile 面积与汇总
         total_area += params["tile_size"] ** 2

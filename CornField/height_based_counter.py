@@ -16,99 +16,16 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
-from common import save_detection_summary_yaml
+from common import (
+    save_detection_summary_yaml,
+    remove_ground_points,
+    statistical_outlier_removal,
+    visualize_3d_with_peaks,
+    calculate_peak_heights
+)
 
 
-def remove_ground_points(points, bottom_percentile, top_percentile):
-    """
-    移除地面点和顶部点（基于bounding box高度范围）
-    
-    参数:
-        points: Nx3点云数组 [x, y, z]
-        bottom_percentile: 要移除的底部百分比
-        top_percentile: 要移除的顶部百分比
-    
-    返回:
-        filtered_points: 移除后的点云
-        mask: 保留点的布尔mask
-    """
-    if len(points) == 0:
-        return points, np.ones(0, dtype=bool)
-    
-    heights = points[:, 2]
-    z_min = heights.min()
-    z_max = heights.max()
-    z_range = z_max - z_min
-    
-    # 基于bounding box计算阈值
-    lower_threshold = z_min + (z_range * bottom_percentile / 100.0)
-    upper_threshold = z_max - (z_range * top_percentile / 100.0)
-    
-    # 保留中间范围的点
-    mask = (heights > lower_threshold) & (heights < upper_threshold)
-    filtered_points = points[mask]
-    
-    removed_bottom = np.sum(heights <= lower_threshold)
-    removed_top = np.sum(heights >= upper_threshold)
-    removed_total = len(points) - len(filtered_points)
-    
-    print(f"  地面+顶部移除 (基于bounding box):")
-    print(f"    高度范围: [{z_min:.3f}, {z_max:.3f}]m (跨度 {z_range:.3f}m)")
-    print(f"    下限阈值: {lower_threshold:.3f}m (底部{bottom_percentile}%)")
-    print(f"    上限阈值: {upper_threshold:.3f}m (顶部{top_percentile}%)")
-    print(f"    移除底部点: {removed_bottom} ({removed_bottom/len(points)*100:.1f}%)")
-    print(f"    移除顶部点: {removed_top} ({removed_top/len(points)*100:.1f}%)")
-    print(f"    总移除: {removed_total} ({removed_total/len(points)*100:.1f}%)")
-    print(f"    剩余点数: {len(filtered_points)}")
-    
-    return filtered_points, mask
-
-
-def statistical_outlier_removal(points, k, std_ratio):
-    """
-    统计离群点移除 (SOR)
-    
-    参数:
-        points: Nx3点云数组 [x, y, z]
-        k: 每个点考虑的最近邻数量
-        std_ratio: 标准差倍数阈值
-    
-    返回:
-        filtered_points: 过滤后的点云
-        mask: 保留点的布尔mask
-    """
-    from scipy.spatial import cKDTree
-    
-    if len(points) < k:
-        return points, np.ones(len(points), dtype=bool)
-    
-    print(f"  SOR去噪: k={k}, std_ratio={std_ratio}")
-    
-    # 构建KD树
-    tree = cKDTree(points)
-    
-    # 计算每个点到其k个最近邻的平均距离
-    distances, _ = tree.query(points, k=k+1)  # k+1因为第一个是点本身
-    mean_distances = distances[:, 1:].mean(axis=1)  # 排除自己
-    
-    # 计算全局统计量
-    global_mean = mean_distances.mean()
-    global_std = mean_distances.std()
-    
-    # 过滤离群点（距离 > mean + std_ratio * std）
-    threshold = global_mean + std_ratio * global_std
-    mask = mean_distances <= threshold
-    
-    filtered_points = points[mask]
-    
-    removed = len(points) - len(filtered_points)
-    print(f"    移除离群点: {removed} ({removed/len(points)*100:.1f}%)")
-    print(f"    剩余点数: {len(filtered_points)}")
-    
-    return filtered_points, mask
-
-
-def compute_height_profile(points, direction, bin_size):
+def compute_height_profile(points, direction, bin_size, verbose=False):
     """
     计算沿指定方向的高度曲线（使用最大高度、平均高度等统计量）
     
@@ -124,7 +41,8 @@ def compute_height_profile(points, direction, bin_size):
         percentile_95_heights: 每个bin的95百分位高度
         raw_counts: 每个bin的原始点数
     """
-    print(f"  计算沿{direction.upper()}轴的高度曲线...")
+    if verbose:
+        print(f"  计算沿{direction.upper()}轴的高度曲线...")
     
     # 选择坐标轴
     if direction.lower() == 'x':
@@ -141,7 +59,8 @@ def compute_height_profile(points, direction, bin_size):
     n_bins = int(np.ceil((coord_max - coord_min) / bin_size))
     
     if n_bins < 10:
-        print(f"    警告: bin数量太少 ({n_bins})")
+        if verbose:
+            print(f"    警告: bin数量太少 ({n_bins})")
         return np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
     
     bins = np.linspace(coord_min, coord_max, n_bins + 1)
@@ -168,15 +87,16 @@ def compute_height_profile(points, direction, bin_size):
             mean_heights[i] = 0
             percentile_95_heights[i] = 0
     
-    print(f"    Bins: {n_bins}, 范围: [{coord_min:.2f}, {coord_max:.2f}]m")
-    print(f"    最大高度范围: [{max_heights.min():.3f}, {max_heights.max():.3f}]m")
-    print(f"    平均高度范围: [{mean_heights.min():.3f}, {mean_heights.max():.3f}]m")
+    if verbose:
+        print(f"    Bins: {n_bins}, 范围: [{coord_min:.2f}, {coord_max:.2f}]m")
+        print(f"    最大高度范围: [{max_heights.min():.3f}, {max_heights.max():.3f}]m")
+        print(f"    平均高度范围: [{mean_heights.min():.3f}, {mean_heights.max():.3f}]m")
     
     return bin_centers, max_heights, mean_heights, percentile_95_heights, raw_counts
 
 
 def detect_plants_from_height(bin_centers, heights, expected_spacing, 
-                              min_prominence, height_metric='max'):
+                              min_prominence, height_metric='max', verbose=False):
     """
     从高度曲线检测植物峰
     
@@ -192,7 +112,8 @@ def detect_plants_from_height(bin_centers, heights, expected_spacing,
         peak_heights: 对应的高度值
         smoothed_heights: 平滑后的高度曲线
     """
-    print(f"  检测植物峰（使用{height_metric}高度，预期株间距: {expected_spacing*100:.0f}cm）...")
+    if verbose:
+        print(f"  检测植物峰（使用{height_metric}高度，预期株间距: {expected_spacing*100:.0f}cm）...")
     
     if len(heights) < 10:
         return np.array([]), np.array([]), heights
@@ -219,7 +140,8 @@ def detect_plants_from_height(bin_centers, heights, expected_spacing,
     )
     
     if len(peaks) == 0:
-        print(f"    未检测到峰")
+        if verbose:
+            print(f"    未检测到峰")
         return np.array([]), np.array([]), smoothed_heights
     
     # 获取峰位置和高度值
@@ -231,10 +153,12 @@ def detect_plants_from_height(bin_centers, heights, expected_spacing,
         actual_spacings = np.diff(peak_positions)
         avg_spacing = actual_spacings.mean()
         std_spacing = actual_spacings.std()
-        print(f"    检测到 {len(peaks)} 个峰")
-        print(f"    实际平均株间距: {avg_spacing*100:.1f} ± {std_spacing*100:.1f} cm")
+        if verbose:
+            print(f"    检测到 {len(peaks)} 个峰")
+            print(f"    实际平均株间距: {avg_spacing*100:.1f} ± {std_spacing*100:.1f} cm")
     else:
-        print(f"    检测到 {len(peaks)} 个峰")
+        if verbose:
+            print(f"    检测到 {len(peaks)} 个峰")
     
     return peak_positions, peak_heights, smoothed_heights
 
@@ -242,7 +166,7 @@ def detect_plants_from_height(bin_centers, heights, expected_spacing,
 def visualize_height_profile(bin_centers, max_heights, mean_heights, 
                              percentile_95_heights, smoothed_heights,
                              peak_positions, peak_heights, raw_counts,
-                             output_path, direction, height_metric):
+                             output_path, direction, height_metric, verbose=False):
     """
     可视化高度曲线和检测结果
     
@@ -337,60 +261,15 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close(fig)
     
-    print(f"  可视化已保存: {output_path}")
-
-
-def visualize_3d_with_peaks(points, peak_positions, direction, output_path):
-    """
-    3D点云可视化，标记检测到的植物位置
-    
-    参数:
-        points: Nx3点云数组
-        peak_positions: 检测到的峰位置
-        direction: 方向轴
-        output_path: 输出文件路径
-    """
-    fig = plt.figure(figsize=(14, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    
-    # 绘制点云（根据高度着色）
-    scatter = ax.scatter(points[:, 0], points[:, 1], points[:, 2], 
-                        c=points[:, 2], s=1, cmap='viridis', alpha=0.4)
-    
-    # 标记峰位置（垂直线）
-    if len(peak_positions) > 0:
-        z_min = points[:, 2].min()
-        z_max = points[:, 2].max()
-        
-        for pos in peak_positions:
-            if direction.lower() == 'x':
-                # X方向的行，绘制垂直于X的平面线
-                ax.plot([pos, pos], [points[:, 1].min(), points[:, 1].max()], 
-                       [z_max, z_max], 'r-', linewidth=2, alpha=0.7)
-            else:  # y
-                # Y方向的行，绘制垂直于Y的平面线
-                ax.plot([points[:, 0].min(), points[:, 0].max()], [pos, pos],
-                       [z_max, z_max], 'r-', linewidth=2, alpha=0.7)
-    
-    ax.set_xlabel('X (m)', fontsize=11)
-    ax.set_ylabel('Y (m)', fontsize=11)
-    ax.set_zlabel('Z (m)', fontsize=11)
-    ax.set_title(f'3D Point Cloud with Detected Plants (n={len(peak_positions)})', 
-                fontsize=13, fontweight='bold')
-    
-    # 添加colorbar
-    cbar = plt.colorbar(scatter, ax=ax, pad=0.1, shrink=0.8)
-    cbar.set_label('Height (m)', fontsize=10)
-    
-    plt.savefig(output_path, dpi=200, bbox_inches='tight')
-    plt.close(fig)
-    print(f"  3D可视化已保存: {output_path}")
+    if verbose:
+        print(f"  可视化已保存: {output_path}")
 
 
 def height_count_from_row(points, direction, expected_spacing, 
                           bin_size, apply_sor, sor_k, sor_std_ratio,
                           remove_ground, ground_percentile, top_percentile,
-                          min_prominence, height_metric, output_dir, row_center=None):
+                          min_prominence, height_metric, output_dir, row_center=None,
+                          row_status: str | None = None, verbose: bool = False):
     """
     从单行点云中基于高度检测并计数植物
     
@@ -415,13 +294,17 @@ def height_count_from_row(points, direction, expected_spacing,
         peak_positions: 植物位置列表
         results_dict: 包含详细结果的字典
     """
-    print(f"\n{'='*60}")
-    print(f"基于高度的植物计数")
-    print(f"{'='*60}")
-    print(f"输入点数: {len(points):,}")
-    print(f"检测方向: {direction.upper()}轴")
-    print(f"预期株间距: {expected_spacing*100:.0f}cm")
-    print(f"高度指标: {height_metric}")
+    if verbose:
+        print(f"\n{'='*60}")
+        print(f"基于高度的植物计数")
+        print(f"{'='*60}")
+        print(f"输入点数: {len(points):,}")
+        print(f"检测方向: {direction.upper()}轴")
+        print(f"预期株间距: {expected_spacing*100:.0f}cm")
+        print(f"高度指标: {height_metric}")
+    
+    # 保存原始点云（用于后续高度计算）
+    original_points = points.copy()
     
     # Step 1: 移除地面点和顶部点
     if remove_ground:
@@ -438,7 +321,7 @@ def height_count_from_row(points, direction, expected_spacing,
     
     # Step 3: 计算高度曲线
     bin_centers, max_heights, mean_heights, percentile_95_heights, raw_counts = compute_height_profile(
-        points, direction=direction, bin_size=bin_size
+        points, direction=direction, bin_size=bin_size, verbose=verbose
     )
     
     if len(max_heights) == 0:
@@ -462,10 +345,21 @@ def height_count_from_row(points, direction, expected_spacing,
         bin_centers, heights_for_detection, 
         expected_spacing=expected_spacing, 
         min_prominence=min_prominence,
-        height_metric=height_metric
+        height_metric=height_metric,
+        verbose=verbose
     )
     
     plant_count = len(peak_positions)
+    
+    # Step 6: 计算实际高度（使用原始点云）
+    if plant_count > 0 and verbose:
+        print(f"  计算植物实际高度（使用原始点云）...")
+        actual_heights = calculate_peak_heights(original_points, peak_positions, direction)
+        if verbose:
+            print(f"    高度范围: [{actual_heights.min():.3f}, {actual_heights.max():.3f}]m")
+            print(f"    平均高度: {actual_heights.mean():.3f}m")
+    else:
+        actual_heights = calculate_peak_heights(original_points, peak_positions, direction) if plant_count > 0 else np.array([])
     
     # 生成可视化（如果指定了输出目录）
     if output_dir is not None:
@@ -477,12 +371,12 @@ def height_count_from_row(points, direction, expected_spacing,
         visualize_height_profile(
             bin_centers, max_heights, mean_heights, percentile_95_heights,
             smoothed_heights, peak_positions, peak_heights, raw_counts,
-            profile_path, direction, height_metric
+            profile_path, direction, height_metric, verbose=verbose
         )
         
         # 3D点云图
         cloud_path = output_dir / f"3d_pointcloud_{direction}.png"
-        visualize_3d_with_peaks(points, peak_positions, direction, cloud_path)
+        visualize_3d_with_peaks(points, peak_positions, direction, cloud_path, verbose=verbose)
         
         # 保存结果为YAML文件
         summary_path = output_dir / "detection_summary.yaml"
@@ -497,7 +391,7 @@ def height_count_from_row(points, direction, expected_spacing,
         
         # 构建植物列表（包含完整XY坐标）
         plants = []
-        for i, (pos, height) in enumerate(zip(peak_positions, peak_heights), 1):
+        for i, (pos, height) in enumerate(zip(peak_positions, actual_heights), 1):
             if direction == 'x':
                 # 沿X方向检测，pos是X坐标，Y是行中心
                 x_coord = float(pos)
@@ -533,14 +427,16 @@ def height_count_from_row(points, direction, expected_spacing,
         }
         
         save_detection_summary_yaml(summary_path, summary_data)
-        
-        print(f"\n结果已保存到: {output_dir}")
-    
+
+        if verbose:
+            print(f"\n结果已保存到: {output_dir}")
+
     # 返回结果
     results = {
         'plant_count': plant_count,
         'peak_positions': peak_positions,
         'peak_heights': peak_heights,
+        'actual_heights': actual_heights,  # 实际计算的高度
         'bin_centers': bin_centers,
         'max_heights': max_heights,
         'mean_heights': mean_heights,
@@ -551,9 +447,14 @@ def height_count_from_row(points, direction, expected_spacing,
         'height_metric': height_metric
     }
     
-    print(f"\n{'='*60}")
-    print(f"✓ 检测完成！共检测到 {plant_count} 株植物")
-    print(f"{'='*60}\n")
+    if verbose:
+        print(f"\n{'='*60}")
+        print(f"✓ 检测完成！共检测到 {plant_count} 株植物")
+        print(f"{'='*60}\n")
+
+    # Row-level minimal status log (if provided)
+    if row_status:
+        print(row_status)
     
     return plant_count, peak_positions, results
 
@@ -696,14 +597,15 @@ def main():
         top_percentile=top_percentile,
         min_prominence=min_prominence,
         height_metric=height_metric,
-        output_dir=output_dir
+        output_dir=output_dir,
+        verbose=True
     )
     
     # 打印结果
     if plant_count > 0:
         print("\n检测到的植物位置:")
-        for i, (pos, height) in enumerate(zip(peak_positions, results['peak_heights']), 1):
-            print(f"  植物 {i}: {direction.upper()} = {pos:.3f} m (高度: {height:.3f} m)")
+        for i, (pos, height) in enumerate(zip(peak_positions, results['actual_heights']), 1):
+            print(f"  植物 {i}: {direction.upper()} = {pos:.3f} m (实际高度: {height:.3f} m)")
 
 
 if __name__ == "__main__":
