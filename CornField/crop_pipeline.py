@@ -21,6 +21,8 @@ import importlib.util
 import laspy
 import time
 import shutil
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import os
 
 # ------------------------------
 # 工具函数
@@ -48,6 +50,108 @@ def read_las_points(las_path):
     y = np.asarray(las.y, dtype=np.float64)
     z = np.asarray(las.z, dtype=np.float64)
     return np.column_stack([x, y, z])
+
+
+# ------------------------------
+# 并行处理函数
+# ------------------------------
+
+def process_tile_parallel(args):
+    """处理单个 tile 的并行函数"""
+    import re
+    (tile_id, tile_data, tile_info_single, params, method, output_base,
+     splitter_path, density_counter_path, height_counter_path) = args
+    
+    # 在子进程中重新加载模块
+    splitter = load_module_from_path(splitter_path, "crop_row_splitter")
+    density_counter = load_module_from_path(density_counter_path, "density_based_counter")
+    height_counter = load_module_from_path(height_counter_path, "height_based_counter")
+    
+    tile_x, tile_y, tile_z = tile_data
+    
+    # 处理单个 tile
+    stats = splitter.process_single_tile(tile_id, tile_x, tile_y, tile_z, 
+                                         tile_info_single, output_base)
+    if stats['row_count'] == 0:
+        return (tile_id, 0, [])
+
+    tile_dir = output_base / f"tile_{tile_id[0]}_{tile_id[1]}"
+    rows = sorted(list(tile_dir.glob("row_*.las")))
+
+    tile_plant_count = 0
+    tile_heights = []
+
+    for idx, row_path in enumerate(rows, 1):
+        row_name = row_path.stem
+        points = read_las_points(row_path)
+        if len(points) < 50:
+            continue
+
+        # 为每个row建立独立输出目录
+        row_output_dir = tile_dir / "count_results" / row_name
+        row_output_dir.mkdir(parents=True, exist_ok=True)
+
+        # 计数方向应与行方向垂直
+        count_direction = 'y' if stats['direction'] == 'x' else 'x'
+        
+        # 从文件名中提取行中心坐标
+        match = re.search(r'at_([-\d.]+)m', row_name)
+        row_center = float(match.group(1)) if match else None
+
+        # 行状态文案
+        row_status = f"tile: {tile_id} row ({idx}/{len(rows)}) completed"
+
+        if method == 'density':
+            plant_count, _, results = density_counter.density_count_from_row(
+                points,
+                direction=count_direction,
+                expected_spacing=params["expected_spacing"],
+                bin_size=params["bin_size"],
+                apply_sor=params["apply_sor"],
+                sor_k=params["sor_k"],
+                sor_std_ratio=params["sor_std_ratio"],
+                remove_ground=params["remove_ground"],
+                ground_percentile=params["ground_percentile"],
+                top_percentile=params["top_percentile"],
+                min_prominence=params["min_prominence"],
+                output_dir=row_output_dir,
+                row_center=row_center,
+                row_status=row_status,
+                verbose=False
+            )
+        else:
+            plant_count, _, results = height_counter.height_count_from_row(
+                points,
+                direction=count_direction,
+                expected_spacing=params["expected_spacing"],
+                bin_size=params["bin_size"],
+                apply_sor=params["apply_sor"],
+                sor_k=params["sor_k"],
+                sor_std_ratio=params["sor_std_ratio"],
+                remove_ground=params["remove_ground"],
+                ground_percentile=params["ground_percentile"],
+                top_percentile=params["top_percentile"],
+                min_prominence=params["min_prominence"],
+                height_metric=params["height_metric"],
+                output_dir=row_output_dir,
+                row_center=row_center,
+                row_status=row_status,
+                verbose=False
+            )
+
+        # 累加计数
+        tile_plant_count += plant_count
+        
+        # 收集高度信息
+        if plant_count > 0 and results:
+            heights = results.get('actual_heights')
+            if (heights is None or len(heights) == 0):
+                heights = results.get('peak_densities') if method == 'density' else results.get('peak_heights')
+            if heights is not None and len(heights) > 0:
+                tile_heights.extend(heights)
+
+    print(f"[Tile {tile_id}] 检测完成，共检测到 {tile_plant_count} 株植物。")
+    return (tile_id, tile_plant_count, tile_heights)
 
 
 # ------------------------------
@@ -101,9 +205,13 @@ def main():
     print(f"[输出] 结果将保存到: {output_base}")
 
     # 加载外部脚本
-    splitter = load_module_from_path("crop_row_splitter.py", "crop_row_splitter")
-    density_counter = load_module_from_path("density_based_counter.py", "density_based_counter")
-    height_counter = load_module_from_path("height_based_counter.py", "height_based_counter")
+    splitter_path = Path("crop_row_splitter.py")
+    density_counter_path = Path("density_based_counter.py")
+    height_counter_path = Path("height_based_counter.py")
+    
+    splitter = load_module_from_path(splitter_path, "crop_row_splitter")
+    density_counter = load_module_from_path(density_counter_path, "density_based_counter")
+    height_counter = load_module_from_path(height_counter_path, "height_based_counter")
 
     # Step 1: 作物行分割
     print("\n[1] 执行作物行分割...")
@@ -111,101 +219,38 @@ def main():
     x, y, z = splitter.normalize_z_to_zero(x, y, z)
     tiles, tile_info = splitter.split_into_tiles(x, y, z, tile_size=params["tile_size"])
 
-    total_plants = 0
-    total_area = 0.0
-    all_heights = []  # 收集所有植物的高度
+    # Step 2: 并行处理所有 tiles
+    # 从配置中获取进程数
+    max_workers = config.get('parallel', {}).get('max_workers')
+    if max_workers is None or max_workers <= 0:
+        max_workers = os.cpu_count()
+    else:
+        max_workers = min(max_workers, os.cpu_count())  # 不超过实际核心数
+    
+    print(f"\n[并行] 开始处理 {len(tiles)} 个 tiles (使用 {max_workers} 个进程)...")
+    tasks = [
+        (tile_id, (tile_x, tile_y, tile_z), tile_info[tile_id], params, method,
+         output_base, splitter_path, density_counter_path, height_counter_path)
+        for tile_id, (tile_x, tile_y, tile_z) in tiles.items()
+    ]
 
+    results = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(process_tile_parallel, t): t[0] for t in tasks}
+        for future in as_completed(futures):
+            try:
+                tile_id, tile_plants, heights = future.result()
+                results.append((tile_id, tile_plants, heights))
+            except Exception as e:
+                print(f"[错误] Tile {futures[future]} 执行失败: {e}")
+
+    # Step 3: 汇总结果
+    total_plants = sum(r[1] for r in results)
+    total_area = len(results) * (params["tile_size"] ** 2)
+    all_heights = [h for r in results for h in r[2]]
+    
     # 用于记录每个 tile 的汇总
-    tile_summaries = []
-
-    # Step 2: 处理每个 tile
-    for tile_id, (tile_x, tile_y, tile_z) in tiles.items():
-        stats = splitter.process_single_tile(tile_id, tile_x, tile_y, tile_z, 
-                                             tile_info[tile_id], output_base)
-        if stats['row_count'] == 0:
-            continue
-
-        tile_dir = output_base / f"tile_{tile_id[0]}_{tile_id[1]}"
-        rows = sorted(list(tile_dir.glob("row_*.las")))
-
-        tile_plant_count = 0
-
-        for idx, row_path in enumerate(rows, 1):
-            row_name = row_path.stem  # 比如 "row_y01_at_12.34m"
-            points = read_las_points(row_path)
-            if len(points) < 50:
-                continue
-
-            # 为每个row建立独立输出目录
-            row_output_dir = tile_dir / "count_results" / row_name
-            row_output_dir.mkdir(parents=True, exist_ok=True)
-
-            # ✅ 修正：计数方向应与行方向垂直
-            count_direction = 'y' if stats['direction'] == 'x' else 'x'
-            
-            # 从文件名中提取行中心坐标 (例如 "row_y01_at_12.34m" -> 12.34)
-            import re
-            match = re.search(r'at_([-\d.]+)m', row_name)
-            row_center = float(match.group(1)) if match else None
-
-            # 行状态文案（最简每行一条）
-            row_status = f"tile: {tile_id} row ({idx}/{len(rows)}) completed"
-
-            if method == 'density':
-                plant_count, _, results = density_counter.density_count_from_row(
-                    points,
-                    direction=count_direction,
-                    expected_spacing=params["expected_spacing"],
-                    bin_size=params["bin_size"],
-                    apply_sor=params["apply_sor"],
-                    sor_k=params["sor_k"],
-                    sor_std_ratio=params["sor_std_ratio"],
-                    remove_ground=params["remove_ground"],
-                    ground_percentile=params["ground_percentile"],
-                    top_percentile=params["top_percentile"],
-                    min_prominence=params["min_prominence"],
-                    output_dir=row_output_dir,
-                    row_center=row_center,
-                    row_status=row_status,
-                    verbose=False
-                )
-            else:
-                plant_count, _, results = height_counter.height_count_from_row(
-                    points,
-                    direction=count_direction,
-                    expected_spacing=params["expected_spacing"],
-                    bin_size=params["bin_size"],
-                    apply_sor=params["apply_sor"],
-                    sor_k=params["sor_k"],
-                    sor_std_ratio=params["sor_std_ratio"],
-                    remove_ground=params["remove_ground"],
-                    ground_percentile=params["ground_percentile"],
-                    top_percentile=params["top_percentile"],
-                    min_prominence=params["min_prominence"],
-                    height_metric=params["height_metric"],
-                    output_dir=row_output_dir,
-                    row_center=row_center,
-                    row_status=row_status,
-                    verbose=False
-                )
-
-            # ✅ 修复：累加计数
-            total_plants += plant_count
-            tile_plant_count += plant_count
-            
-            # 收集高度信息
-            if plant_count > 0 and results:
-                # 优先使用实际高度，其次回退到旧键以兼容
-                heights = results.get('actual_heights')
-                if (heights is None or len(heights) == 0):
-                    heights = results.get('peak_densities') if method == 'density' else results.get('peak_heights')
-                if heights is not None and len(heights) > 0:
-                    all_heights.extend(heights)
-
-        # Tile 面积与汇总
-        total_area += params["tile_size"] ** 2
-        tile_summaries.append((tile_id, tile_plant_count))
-        print(f"[Tile {tile_id}] 检测完成，共检测到 {tile_plant_count} 株植物。")
+    tile_summaries = [(r[0], r[1]) for r in results]
 
     # Step 3: 汇总密度
     avg_density = total_plants / total_area if total_area > 0 else 0.0
