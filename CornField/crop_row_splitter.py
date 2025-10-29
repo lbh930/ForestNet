@@ -258,44 +258,12 @@ def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
     print(f"  高度曲线图已保存: {output_file}")
 
 
-def create_chm_visualization(x, y, z, x_centers, x_peaks, y_centers, y_peaks,
-                            chosen_direction, resolution, output_prefix):
-    """生成CHM并只标记选中方向的rows"""
+def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
+                            x_centers, x_peaks, y_centers, y_peaks,
+                            chosen_direction, output_prefix, boundaries=None):
+    """生成CHM可视化（使用预计算的平滑CHM）"""
     print("  生成CHM可视化...")
     t0 = time.time()
-    
-    # 创建2D网格
-    x_min, x_max = x.min(), x.max()
-    y_min, y_max = y.min(), y.max()
-    
-    nx = int(np.ceil((x_max - x_min) / resolution))
-    ny = int(np.ceil((y_max - y_min) / resolution))
-    
-    # 创建CHM（使用最大高度）
-    chm = np.full((ny, nx), np.nan)
-    
-    x_idx = ((x - x_min) / resolution).astype(int)
-    y_idx = ((y - y_min) / resolution).astype(int)
-    
-    x_idx = np.clip(x_idx, 0, nx - 1)
-    y_idx = np.clip(y_idx, 0, ny - 1)
-    
-    for i in range(len(x)):
-        if np.isnan(chm[y_idx[i], x_idx[i]]) or z[i] > chm[y_idx[i], x_idx[i]]:
-            chm[y_idx[i], x_idx[i]] = z[i]
-    
-    # 填充空白并平滑
-    mask = ~np.isnan(chm)
-    valid_count = np.sum(mask)
-    
-    if valid_count > 0:
-        indices = distance_transform_edt(~mask, return_distances=False, return_indices=True)
-        chm_filled = chm[tuple(indices)]
-        chm_smoothed = gaussian_filter(chm_filled, sigma=2.5, mode='nearest')
-        dilated_mask = binary_dilation(mask, iterations=5)
-        chm_smoothed[~dilated_mask] = np.nan
-    else:
-        chm_smoothed = chm
     
     # 计算实际宽高比
     x_range = x_max - x_min
@@ -326,15 +294,35 @@ def create_chm_visualization(x, y, z, x_centers, x_peaks, y_centers, y_peaks,
     if chosen_direction == 'x' and len(x_peaks) > 0:
         for peak_idx in x_peaks:
             x_pos = x_centers[peak_idx]
-            ax.axvline(x=x_pos, color='red', linewidth=1.5, alpha=0.8, linestyle='-')
+            ax.axvline(x=x_pos, color='blue', linewidth=1.5, alpha=0.8, linestyle='-')
         direction_label = f'X-axis rows (n={len(x_peaks)}) [SELECTED]'
         row_count_str = f'{len(x_peaks)} X-rows'
+        
+        # 绘制边界曲线（红色细虚线）
+        if boundaries is not None and len(boundaries) > 0:
+            for boundary in boundaries:
+                y_along = boundary['along']
+                x_min = boundary['across_min']
+                x_max = boundary['across_max']
+                ax.plot(x_min, y_along, 'r--', linewidth=0.5, alpha=0.6)
+                ax.plot(x_max, y_along, 'r--', linewidth=0.5, alpha=0.6)
+        
     elif chosen_direction == 'y' and len(y_peaks) > 0:
         for peak_idx in y_peaks:
             y_pos = y_centers[peak_idx]
-            ax.axhline(y=y_pos, color='cyan', linewidth=1.5, alpha=0.8, linestyle='-')
+            ax.axhline(y=y_pos, color='blue', linewidth=1.5, alpha=0.8, linestyle='-')
         direction_label = f'Y-axis rows (n={len(y_peaks)}) [SELECTED]'
         row_count_str = f'{len(y_peaks)} Y-rows'
+        
+        # 绘制边界曲线（红色细虚线）
+        if boundaries is not None and len(boundaries) > 0:
+            for boundary in boundaries:
+                x_along = boundary['along']
+                y_min = boundary['across_min']
+                y_max = boundary['across_max']
+                ax.plot(x_along, y_min, 'r--', linewidth=0.5, alpha=0.6)
+                ax.plot(x_along, y_max, 'r--', linewidth=0.5, alpha=0.6)
+        
     else:
         direction_label = 'No rows detected'
         row_count_str = '0 rows'
@@ -350,16 +338,25 @@ def create_chm_visualization(x, y, z, x_centers, x_peaks, y_centers, y_peaks,
     
     # 图例
     from matplotlib.lines import Line2D
+    legend_elements = []
     if chosen_direction == 'x':
-        legend_elements = [
-            Line2D([0], [0], color='red', linewidth=2.5, label=direction_label)
-        ]
+        legend_elements.append(
+            Line2D([0], [0], color='blue', linewidth=2.5, label=direction_label)
+        )
+        if boundaries is not None and len(boundaries) > 0:
+            legend_elements.append(
+                Line2D([0], [0], color='red', linewidth=0.5, linestyle='--', 
+                       label=f'Row boundaries (n={len(boundaries)+1})')
+            )
     elif chosen_direction == 'y':
-        legend_elements = [
-            Line2D([0], [0], color='cyan', linewidth=2.5, label=direction_label)
-        ]
-    else:
-        legend_elements = []
+        legend_elements.append(
+            Line2D([0], [0], color='blue', linewidth=2.5, label=direction_label)
+        )
+        if boundaries is not None and len(boundaries) > 0:
+            legend_elements.append(
+                Line2D([0], [0], color='red', linewidth=0.5, linestyle='--', 
+                       label=f'Row boundaries (n={len(boundaries)+1})')
+            )
     
     if legend_elements:
         ax.legend(handles=legend_elements, loc='upper right', fontsize=11, 
@@ -376,59 +373,221 @@ def create_chm_visualization(x, y, z, x_centers, x_peaks, y_centers, y_peaks,
     print(f"  CHM已保存: {output_file} (耗时: {time.time()-t0:.2f}s)")
 
 
-def calculate_row_boundaries(row_positions):
+def create_smoothed_chm(tile_x, tile_y, tile_z, resolution=0.02):
     """
-    计算每个row的边界（中心到相邻row中点，再乘以90%）
+    创建平滑的CHM（供可视化和边界计算共用）
+    
+    参数:
+        tile_x, tile_y, tile_z: tile点云数据
+        resolution: CHM分辨率（默认2cm）
+    
+    返回:
+        chm_smoothed: 平滑后的CHM数组
+        x_min, x_max, y_min, y_max: 边界坐标
+        nx, ny: 网格尺寸
+    """
+    x_min, x_max = tile_x.min(), tile_x.max()
+    y_min, y_max = tile_y.min(), tile_y.max()
+    
+    nx = int(np.ceil((x_max - x_min) / resolution))
+    ny = int(np.ceil((y_max - y_min) / resolution))
+    
+    # 创建CHM（使用最大高度）
+    chm = np.full((ny, nx), np.nan)
+    x_idx = ((tile_x - x_min) / resolution).astype(int)
+    y_idx = ((tile_y - y_min) / resolution).astype(int)
+    x_idx = np.clip(x_idx, 0, nx - 1)
+    y_idx = np.clip(y_idx, 0, ny - 1)
+    
+    for i in range(len(tile_x)):
+        if np.isnan(chm[y_idx[i], x_idx[i]]) or tile_z[i] > chm[y_idx[i], x_idx[i]]:
+            chm[y_idx[i], x_idx[i]] = tile_z[i]
+    
+    # 填充并平滑CHM
+    mask = ~np.isnan(chm)
+    if np.sum(mask) > 0:
+        indices = distance_transform_edt(~mask, return_distances=False, return_indices=True)
+        chm_filled = chm[tuple(indices)]
+        chm_smoothed = gaussian_filter(chm_filled, sigma=2.5, mode='nearest')
+        dilated_mask = binary_dilation(mask, iterations=5)
+        chm_smoothed[~dilated_mask] = np.nan
+    else:
+        chm_smoothed = chm
+    
+    return chm_smoothed, x_min, x_max, y_min, y_max, nx, ny
+
+
+def calculate_row_boundaries_curves(row_positions, chm_smoothed, x_min, y_min, nx, ny, 
+                                    row_direction, resolution=0.02, granularity=0.1):
+    """
+    计算每个row的边界曲线（基于平滑CHM在垂直方向上找最低点）
     
     参数:
         row_positions: 排序后的row中心位置列表
+        chm_smoothed: 平滑后的CHM数组
+        x_min, y_min: CHM的起始坐标
+        nx, ny: CHM的网格尺寸
+        row_direction: 'x' 或 'y'
+        resolution: CHM分辨率（默认2cm）
+        granularity: 沿row方向的采样间隔（默认10cm）
     
     返回:
-        boundaries: [(min, max), ...] 每个row的边界
+        boundary_curves: [{'along': [...], 'across_min': [...], 'across_max': [...]}, ...]
+            对于每个row，返回沿着row方向的坐标和对应的边界位置
     """
     if len(row_positions) == 0:
         return []
     
-    boundaries = []
+    n_rows = len(row_positions)
     
-    for i, pos in enumerate(row_positions):
-        if i == 0:
-            # 第一个row：左边界是到第二个row中点
-            if len(row_positions) > 1:
-                right_mid = (pos + row_positions[i+1]) / 2
-                left_edge = pos - (right_mid - pos)  # 对称
-                right_edge = right_mid
+    # 计算along方向的范围和采样点
+    if row_direction == 'x':
+        along_min = y_min
+        along_max = y_min + ny * resolution
+    else:
+        along_min = x_min
+        along_max = x_min + nx * resolution
+    
+    along_samples = np.arange(along_min, along_max + granularity, granularity)
+    
+    # 为每对相邻rows计算分割曲线
+    split_curves = []  # 存储每个间隙的分割曲线
+    
+    for i in range(n_rows - 1):
+        pos1 = row_positions[i]
+        pos2 = row_positions[i + 1]
+        
+        split_positions = []
+        valid_along = []
+        
+        # 对于沿着row方向的每个采样点
+        for along_pos in along_samples:
+            # 确定沿着方向的像素索引范围
+            if row_direction == 'x':
+                # X方向的row，沿Y延伸
+                y_idx_center = int((along_pos - y_min) / resolution)
+                if y_idx_center < 0 or y_idx_center >= ny:
+                    continue
+                
+                # 在X方向（垂直于row）上找最低点
+                x_start_idx = int((pos1 - x_min) / resolution)
+                x_end_idx = int((pos2 - x_min) / resolution)
+                x_start_idx = max(0, x_start_idx)
+                x_end_idx = min(nx, x_end_idx)
+                
+                if x_end_idx <= x_start_idx:
+                    continue
+                
+                # 从平滑CHM中提取这一行
+                chm_slice = chm_smoothed[y_idx_center, x_start_idx:x_end_idx]
+                
             else:
-                # 只有一个row，无法确定边界
-                left_edge = pos - 0.2
-                right_edge = pos + 0.2
-        elif i == len(row_positions) - 1:
-            # 最后一个row：右边界是到前一个row中点
-            left_mid = (row_positions[i-1] + pos) / 2
-            left_edge = left_mid
-            right_edge = pos + (pos - left_mid)  # 对称
+                # Y方向的row，沿X延伸
+                x_idx_center = int((along_pos - x_min) / resolution)
+                if x_idx_center < 0 or x_idx_center >= nx:
+                    continue
+                
+                # 在Y方向（垂直于row）上找最低点
+                y_start_idx = int((pos1 - y_min) / resolution)
+                y_end_idx = int((pos2 - y_min) / resolution)
+                y_start_idx = max(0, y_start_idx)
+                y_end_idx = min(ny, y_end_idx)
+                
+                if y_end_idx <= y_start_idx:
+                    continue
+                
+                # 从平滑CHM中提取这一列
+                chm_slice = chm_smoothed[y_start_idx:y_end_idx, x_idx_center]
+            
+            # 在平滑CHM切片中找最低点
+            valid_mask = ~np.isnan(chm_slice)
+            if np.sum(valid_mask) > 3:
+                valid_heights = chm_slice[valid_mask]
+                min_height_idx = np.argmin(valid_heights)
+                
+                # 转换回坐标
+                valid_indices = np.where(valid_mask)[0]
+                min_idx_in_slice = valid_indices[min_height_idx]
+                
+                if row_direction == 'x':
+                    min_pos = x_min + (x_start_idx + min_idx_in_slice) * resolution
+                else:
+                    min_pos = y_min + (y_start_idx + min_idx_in_slice) * resolution
+                
+                split_positions.append(min_pos)
+                valid_along.append(along_pos)
+        
+        if len(split_positions) > 0:
+            split_curves.append({
+                'along': np.array(valid_along),
+                'split': np.array(split_positions)
+            })
+        else:
+            # 回退到直线
+            split_curves.append({
+                'along': np.array([along_min, along_max]),
+                'split': np.array([(pos1 + pos2) / 2, (pos1 + pos2) / 2])
+            })
+    
+    # 为每个row构建边界
+    boundary_curves = []
+    for i in range(n_rows):
+        if n_rows == 1:
+            # 只有一个row，固定宽度
+            boundary_curves.append({
+                'along': np.array([along_min, along_max]),
+                'across_min': np.array([row_positions[0] - 0.2, row_positions[0] - 0.2]),
+                'across_max': np.array([row_positions[0] + 0.2, row_positions[0] + 0.2])
+            })
+        elif i == 0:
+            # 第一个row
+            right_curve = split_curves[0]
+            along_pts = right_curve['along']
+            across_max = right_curve['split']
+            across_min = 2 * row_positions[0] - across_max  # 对称
+            boundary_curves.append({
+                'along': along_pts,
+                'across_min': across_min,
+                'across_max': across_max
+            })
+        elif i == n_rows - 1:
+            # 最后一个row
+            left_curve = split_curves[-1]
+            along_pts = left_curve['along']
+            across_min = left_curve['split']
+            across_max = 2 * row_positions[-1] - across_min  # 对称
+            boundary_curves.append({
+                'along': along_pts,
+                'across_min': across_min,
+                'across_max': across_max
+            })
         else:
             # 中间的row
-            left_mid = (row_positions[i-1] + pos) / 2
-            right_mid = (pos + row_positions[i+1]) / 2
-            left_edge = left_mid
-            right_edge = right_mid
-        
-        # 缩小到90%
-        center = pos
-        half_width = (right_edge - left_edge) / 2
-        boundaries.append((
-            center - half_width * 0.9,
-            center + half_width * 0.9
-        ))
+            left_curve = split_curves[i - 1]
+            right_curve = split_curves[i]
+            
+            # 使用交集的along坐标
+            along_pts = np.intersect1d(left_curve['along'], right_curve['along'])
+            if len(along_pts) == 0:
+                along_pts = left_curve['along']
+            
+            # 插值获取对应的边界值
+            across_min = np.interp(along_pts, left_curve['along'], left_curve['split'])
+            across_max = np.interp(along_pts, right_curve['along'], right_curve['split'])
+            
+            boundary_curves.append({
+                'along': along_pts,
+                'across_min': across_min,
+                'across_max': across_max
+            })
     
-    return boundaries
+    return boundary_curves
 
 
 def split_and_save_rows(tile_x, tile_y, tile_z, row_centers, row_direction, 
-                        output_dir, tile_id):
+                        output_dir, tile_id, boundary_curves):
     """
-    分割并保存每个row的点云
+    分割并保存每个row的点云（使用曲线边界）
     
     参数:
         tile_x, tile_y, tile_z: tile点云
@@ -436,22 +595,42 @@ def split_and_save_rows(tile_x, tile_y, tile_z, row_centers, row_direction,
         row_direction: 'x' 或 'y'
         output_dir: 输出目录
         tile_id: tile ID
+        boundary_curves: 边界曲线列表
     """
     print(f"  分割 {len(row_centers)} 个 {row_direction.upper()}-方向的rows...")
     
-    # 计算边界
-    boundaries = calculate_row_boundaries(row_centers)
-    
-    # 选择坐标轴
+    # 确定坐标方向
     if row_direction == 'x':
-        coord = tile_x
+        along_coord = tile_y
+        across_coord = tile_x
     else:
-        coord = tile_y
+        along_coord = tile_x
+        across_coord = tile_y
     
     # 保存每个row
-    for i, (row_pos, (min_bound, max_bound)) in enumerate(zip(row_centers, boundaries), 1):
-        # 筛选该row内的点
-        mask = (coord >= min_bound) & (coord <= max_bound)
+    for i, (row_pos, boundary) in enumerate(zip(row_centers, boundary_curves), 1):
+        along_pts = boundary['along']
+        across_min = boundary['across_min']
+        across_max = boundary['across_max']
+        
+        # 向量化：先过滤沿着方向的范围
+        range_mask = (along_coord >= along_pts[0]) & (along_coord <= along_pts[-1])
+        
+        # 对范围内的点进行插值（向量化）
+        valid_along = along_coord[range_mask]
+        valid_across = across_coord[range_mask]
+        
+        # 向量化插值
+        min_bounds = np.interp(valid_along, along_pts, across_min)
+        max_bounds = np.interp(valid_along, along_pts, across_max)
+        
+        # 向量化判断
+        in_boundary = (valid_across >= min_bounds) & (valid_across <= max_bounds)
+        
+        # 构建完整mask
+        mask = np.zeros(len(tile_x), dtype=bool)
+        mask[range_mask] = in_boundary
+        
         row_point_count = np.sum(mask)
         
         if row_point_count < 10:
@@ -467,9 +646,8 @@ def split_and_save_rows(tile_x, tile_y, tile_z, row_centers, row_direction,
         row_path = output_dir / row_filename
         save_las_file(row_x, row_y, row_z, row_path)
         
-        width = max_bound - min_bound
-        print(f"    Row {i}: 位置={row_pos:.2f}m, 范围=[{min_bound:.2f}, {max_bound:.2f}]m "
-              f"(宽度={width:.2f}m), 点数={row_point_count:,}")
+        avg_width = np.mean(across_max - across_min)
+        print(f"    Row {i}: 位置={row_pos:.2f}m, 平均宽度={avg_width:.2f}m, 点数={row_point_count:,}")
 
 
 def process_single_tile(tile_id, tile_x, tile_y, tile_z, tile_info, output_dir):
@@ -567,14 +745,28 @@ def process_single_tile(tile_id, tile_x, tile_y, tile_z, tile_info, output_dir):
                         y_centers, y_heights, y_peaks, y_smoothed,
                         chosen_direction, output_prefix)
     
+    # 创建平滑CHM（只计算一次）
+    print("  创建平滑CHM...")
+    chm_smoothed, x_min, x_max, y_min, y_max, nx, ny = create_smoothed_chm(
+        tile_x, tile_y, tile_z, resolution=granularity
+    )
+    
+    # 计算边界曲线（使用预计算的CHM）
+    print("  计算边界曲线...")
+    boundary_curves = calculate_row_boundaries_curves(
+        row_positions, chm_smoothed, x_min, y_min, nx, ny, 
+        chosen_direction, resolution=granularity, granularity=granularity
+    )
+    
+    # 生成CHM可视化（使用预计算的CHM）
     print("  生成CHM可视化...")
-    create_chm_visualization(tile_x, tile_y, tile_z,
+    create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
                             x_centers, x_peaks, y_centers, y_peaks,
-                            chosen_direction, granularity, output_prefix)
+                            chosen_direction, output_prefix, boundary_curves)
     
     # 分割并保存rows
     split_and_save_rows(tile_x, tile_y, tile_z, row_positions, 
-                       chosen_direction, tile_dir, tile_id)
+                       chosen_direction, tile_dir, tile_id, boundary_curves)
     
     return {
         'tile_id': tile_id,
