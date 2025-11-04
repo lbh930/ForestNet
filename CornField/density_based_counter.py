@@ -84,7 +84,7 @@ def compute_density_profile(points, direction, bin_size, verbose=False):
 
 
 def detect_plants_from_density(bin_centers, density, expected_spacing, 
-                               min_prominence, verbose=False):
+                               min_prominence, smooth_sigma=1.0, verbose=False):
     """
     从密度曲线检测植物峰
     
@@ -93,6 +93,7 @@ def detect_plants_from_density(bin_centers, density, expected_spacing,
         density: 密度值
         expected_spacing: 预期株间距（米）
         min_prominence: 最小峰突出度（相对值）
+        smooth_sigma: 高斯平滑的sigma值（越大越平滑）
     
     返回:
         peak_positions: 检测到的植物位置
@@ -100,17 +101,16 @@ def detect_plants_from_density(bin_centers, density, expected_spacing,
         smoothed_density: 平滑后的密度曲线
     """
     if verbose:
-        print(f"  检测植物峰（预期株间距: {expected_spacing*100:.0f}cm）...")
+        print(f"  检测植物峰（预期株间距: {expected_spacing*100:.0f}cm, sigma={smooth_sigma:.1f}）...")
     
     if len(density) < 10:
         return np.array([]), np.array([]), density
     
-    # Step 1: 高斯平滑
-    # sigma选择：覆盖约2cm范围（减小平滑幅度）
+    # 计算bin大小
     bin_size = bin_centers[1] - bin_centers[0] if len(bin_centers) > 1 else 0.01
-    sigma = 1
     
-    smoothed_density = gaussian_filter1d(density, sigma=sigma)
+    # Step 1: 高斯平滑
+    smoothed_density = gaussian_filter1d(density, sigma=smooth_sigma)
     
     # Step 2: 峰检测
     # distance参数：预期株间距对应的bin数
@@ -216,7 +216,7 @@ def visualize_density_profile(bin_centers, density, smoothed_density,
 def density_count_from_row(points, direction, expected_spacing, 
                            bin_size, apply_sor, sor_k, sor_std_ratio,
                            remove_ground, ground_percentile, top_percentile,
-                           min_prominence, output_dir, row_center=None,
+                           min_prominence, smooth_sigma=1.0, output_dir=None, row_center=None,
                            row_status: str | None = None, verbose: bool = False):
     """
     从单行点云中基于密度检测并计数植物
@@ -249,17 +249,17 @@ def density_count_from_row(points, direction, expected_spacing,
         print(f"检测方向: {direction.upper()}轴")
         print(f"预期株间距: {expected_spacing*100:.0f}cm")
     
-    # 保存原始点云（用于后续高度计算）
-    original_points = points.copy()
+    # Step 1: 统计离群点移除（可选）
+    if apply_sor:
+        points, _ = statistical_outlier_removal(points, k=sor_k, std_ratio=sor_std_ratio)
     
-    # Step 1: 移除地面点和顶部点
+    # 保存SOR后的点云（用于后续高度计算）
+    sor_cleaned_points = points.copy()
+    
+    # Step 2: 移除地面点和顶部点
     if remove_ground:
         points, _ = remove_ground_points(points, bottom_percentile=ground_percentile, 
                                         top_percentile=top_percentile)
-    
-    # Step 2: 统计离群点移除（可选）
-    if apply_sor:
-        points, _ = statistical_outlier_removal(points, k=sor_k, std_ratio=sor_std_ratio)
     
     if len(points) < 50:
         print("错误: 点数太少，无法进行分析")
@@ -276,20 +276,21 @@ def density_count_from_row(points, direction, expected_spacing,
     
     # Step 4: 峰检测
     peak_positions, peak_densities, smoothed_density = detect_plants_from_density(
-        bin_centers, density, expected_spacing=expected_spacing, min_prominence=min_prominence, verbose=verbose
+        bin_centers, density, expected_spacing=expected_spacing, 
+        min_prominence=min_prominence, smooth_sigma=smooth_sigma, verbose=verbose
     )
     
     plant_count = len(peak_positions)
     
-    # Step 5: 计算实际高度（使用原始点云）
+    # Step 5: 计算实际高度（使用SOR后但未掐头去尾的点云）
     if plant_count > 0 and verbose:
-        print(f"  计算植物实际高度（使用原始点云）...")
-        actual_heights = calculate_peak_heights(original_points, peak_positions, direction)
+        print(f"  计算植物实际高度（使用SOR后的完整点云）...")
+        actual_heights = calculate_peak_heights(sor_cleaned_points, peak_positions, direction)
         if verbose:
             print(f"    高度范围: [{actual_heights.min():.3f}, {actual_heights.max():.3f}]m")
             print(f"    平均高度: {actual_heights.mean():.3f}m")
     else:
-        actual_heights = calculate_peak_heights(original_points, peak_positions, direction) if plant_count > 0 else np.array([])
+        actual_heights = calculate_peak_heights(sor_cleaned_points, peak_positions, direction) if plant_count > 0 else np.array([])
     
     # 生成可视化（如果指定了输出目录）
     if output_dir is not None:

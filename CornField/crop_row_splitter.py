@@ -130,9 +130,15 @@ def compute_height_profile(coord, z, granularity=0.02):
     return bin_centers, mean_heights
 
 
-def detect_crop_rows(centers, heights, sigma=5):
+def detect_crop_rows(centers, heights, sigma=5, prominence=0.02):
     """
     检测作物行peaks
+    
+    参数:
+        centers: bin中心坐标
+        heights: 高度值
+        sigma: 高斯平滑sigma值
+        prominence: 峰突出度阈值
     
     返回:
         original_peaks: peak的索引
@@ -150,7 +156,7 @@ def detect_crop_rows(centers, heights, sigma=5):
     smoothed = gaussian_filter1d(valid_heights, sigma=sigma)
     
     # 检测peaks
-    peaks, _ = find_peaks(smoothed, prominence=0.02, distance=10)
+    peaks, _ = find_peaks(smoothed, prominence=prominence, distance=10)
     
     if len(peaks) < 2:
         return np.array([]), np.full_like(heights, np.nan), 0.0
@@ -650,7 +656,8 @@ def split_and_save_rows(tile_x, tile_y, tile_z, row_centers, row_direction,
         print(f"    Row {i}: 位置={row_pos:.2f}m, 平均宽度={avg_width:.2f}m, 点数={row_point_count:,}")
 
 
-def process_single_tile(tile_id, tile_x, tile_y, tile_z, tile_info, output_dir):
+def process_single_tile(tile_id, tile_x, tile_y, tile_z, tile_info, output_dir,
+                       row_detection_smooth_sigma=0.05, row_detection_prominence=0.02):
     """处理单个tile：检测rows并分割保存"""
     i, j = tile_id
     print(f"\n{'='*50}")
@@ -668,17 +675,24 @@ def process_single_tile(tile_id, tile_x, tile_y, tile_z, tile_info, output_dir):
     
     granularity = 0.02  # 2cm
     
+    # 计算平滑sigma（将米转换为bin数）
+    smooth_sigma_bins = int(row_detection_smooth_sigma / granularity)
+    
     # X轴分析
     print("  检测X轴方向的rows...")
     x_centers, x_heights = compute_height_profile(tile_x, tile_z, granularity)
-    x_peaks, x_smoothed, x_regularity = detect_crop_rows(x_centers, x_heights, sigma=int(0.05/granularity))
+    x_peaks, x_smoothed, x_regularity = detect_crop_rows(
+        x_centers, x_heights, sigma=smooth_sigma_bins, prominence=row_detection_prominence
+    )
     x_row_count = len(x_peaks)
     print(f"    -> 检测到 {x_row_count} 个X-方向rows, 规律度={x_regularity:.3f}")
     
     # Y轴分析
     print("  检测Y轴方向的rows...")
     y_centers, y_heights = compute_height_profile(tile_y, tile_z, granularity)
-    y_peaks, y_smoothed, y_regularity = detect_crop_rows(y_centers, y_heights, sigma=int(0.05/granularity))
+    y_peaks, y_smoothed, y_regularity = detect_crop_rows(
+        y_centers, y_heights, sigma=smooth_sigma_bins, prominence=row_detection_prominence
+    )
     y_row_count = len(y_peaks)
     print(f"    -> 检测到 {y_row_count} 个Y-方向rows, 规律度={y_regularity:.3f}")
     

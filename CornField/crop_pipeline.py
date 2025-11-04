@@ -59,8 +59,11 @@ def read_las_points(las_path):
 def process_tile_parallel(args):
     """处理单个 tile 的并行函数"""
     import re
-    (tile_id, tile_data, tile_info_single, params, method, output_base,
+    (tile_id, tile_data, tile_info_single, params, output_base,
      splitter_path, density_counter_path, height_counter_path) = args
+    
+    # 从params中获取method
+    method = params['method']
     
     # 在子进程中重新加载模块
     splitter = load_module_from_path(splitter_path, "crop_row_splitter")
@@ -69,9 +72,13 @@ def process_tile_parallel(args):
     
     tile_x, tile_y, tile_z = tile_data
     
-    # 处理单个 tile
-    stats = splitter.process_single_tile(tile_id, tile_x, tile_y, tile_z, 
-                                         tile_info_single, output_base)
+    # 处理单个 tile（传递row detection参数）
+    stats = splitter.process_single_tile(
+        tile_id, tile_x, tile_y, tile_z, 
+        tile_info_single, output_base,
+        row_detection_smooth_sigma=params.get("row_detection_smooth_sigma", 0.05),
+        row_detection_prominence=params.get("row_detection_prominence", 0.02)
+    )
     if stats['row_count'] == 0:
         return (tile_id, 0, [])
 
@@ -114,6 +121,7 @@ def process_tile_parallel(args):
                 ground_percentile=params["ground_percentile"],
                 top_percentile=params["top_percentile"],
                 min_prominence=params["min_prominence"],
+                smooth_sigma=params.get("smooth_sigma", 1.0),
                 output_dir=row_output_dir,
                 row_center=row_center,
                 row_status=row_status,
@@ -133,6 +141,9 @@ def process_tile_parallel(args):
                 top_percentile=params["top_percentile"],
                 min_prominence=params["min_prominence"],
                 height_metric=params["height_metric"],
+                kernel_length=params.get("kernel_length"),
+                kernel_width=params.get("kernel_width"),
+                kernel_height_percentile=params.get("kernel_height_percentile"),
                 output_dir=row_output_dir,
                 row_center=row_center,
                 row_status=row_status,
@@ -160,7 +171,7 @@ def process_tile_parallel(args):
 
 def main():
     if len(sys.argv) < 3:
-        print("用法: python crop_pipeline.py <las文件路径> --method <density|height>")
+        print("用法: python crop_pipeline.py <las文件路径> --crop <corn|soybean>")
         sys.exit(1)
     
     las_path = Path(sys.argv[1])
@@ -168,26 +179,30 @@ def main():
         print(f"错误: 文件不存在: {las_path}")
         sys.exit(1)
     
-    # 获取计数方式
-    if '--method' in sys.argv:
-        idx = sys.argv.index('--method')
+    # 获取作物类型
+    if '--crop' in sys.argv:
+        idx = sys.argv.index('--crop')
         if idx + 1 < len(sys.argv):
-            method = sys.argv[idx + 1].lower()
-            if method not in ['density', 'height']:
-                print("错误: method 必须是 'density' 或 'height'")
+            crop_type = sys.argv[idx + 1].lower()
+            if crop_type not in ['corn', 'soybean']:
+                print("错误: crop 必须是 'corn' 或 'soybean'")
                 sys.exit(1)
         else:
-            print("错误: 未指定method参数")
+            print("错误: 未指定crop参数")
             sys.exit(1)
     else:
-        print("错误: 需要 --method 参数")
+        print("错误: 需要 --crop 参数")
         sys.exit(1)
     
     # 加载配置
     config = load_config()
-    params = config[method]
+    params = config[crop_type]
+    method = params['method']  # 从作物配置中获取方法
+    
     print("="*60)
-    print(f"Crop Pipeline 启动 ({method}-based counting)")
+    print(f"Crop Pipeline 启动")
+    print(f"作物类型: {crop_type.upper()}")
+    print(f"检测方法: {method}-based counting")
     print("="*60)
 
     t0 = time.time()
@@ -215,6 +230,8 @@ def main():
 
     # Step 1: 作物行分割
     print("\n[1] 执行作物行分割...")
+    print(f"  Row detection参数: smooth_sigma={params.get('row_detection_smooth_sigma', 0.05):.3f}m, "
+          f"prominence={params.get('row_detection_prominence', 0.02):.3f}")
     x, y, z = splitter.read_las_file(las_path)
     x, y, z = splitter.normalize_z_to_zero(x, y, z)
     tiles, tile_info = splitter.split_into_tiles(x, y, z, tile_size=params["tile_size"])
@@ -229,7 +246,7 @@ def main():
     
     print(f"\n[并行] 开始处理 {len(tiles)} 个 tiles (使用 {max_workers} 个进程)...")
     tasks = [
-        (tile_id, (tile_x, tile_y, tile_z), tile_info[tile_id], params, method,
+        (tile_id, (tile_x, tile_y, tile_z), tile_info[tile_id], params,
          output_base, splitter_path, density_counter_path, height_counter_path)
         for tile_id, (tile_x, tile_y, tile_z) in tiles.items()
     ]
@@ -281,6 +298,7 @@ def main():
         f.write("Crop Density Summary\n")
         f.write("="*60 + "\n")
         f.write(f"Input file: {las_path}\n")
+        f.write(f"Crop type: {crop_type}\n")
         f.write(f"Method: {method}\n")
         f.write(f"Total plants: {total_plants}\n")
         f.write(f"Total area: {total_area:.2f} m²\n")

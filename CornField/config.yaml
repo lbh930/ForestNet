@@ -1,54 +1,53 @@
-# 配置文件: config.yaml
-# 用于指定不同方法下的参数设置
+# 并行处理配置
+parallel:
+  max_workers: 20  # 最大进程数，设为 null 或 0 则使用所有CPU核心
 
-density:
+# 玉米检测配置
+corn:
+  method: density  # density 或 height
   tile_size: 10.0
-  expected_spacing: 0.08
-  bin_size: 0.005
-  min_prominence: 0.02
+  expected_spacing: 0.07
+  bin_size: 0.01
+  min_prominence: 0.015
+  smooth_sigma: 0.5  # 高斯平滑sigma，玉米株间距大，可以用较大的平滑
   remove_ground: true
-  ground_percentile: 30
+  ground_percentile: 20
   top_percentile: 30
   apply_sor: true
   sor_k: 20
   sor_std_ratio: 2.0
 
-height:
-  tile_size: 10.0
-  expected_spacing: 0.08
-  bin_size: 0.005
-  min_prominence: 0.02
-  height_metric: max  # 可选: max | mean | percentile_95
-  remove_ground: true
-  ground_percentile: 30
-  top_percentile: 30
-  apply_sor: true
-  sor_k: 20
-  sor_std_ratio: 2.0
-# 配置文件: config.yaml
-# 用于指定不同方法下的参数设置
+  # Row detection参数（行检测阶段）
+  row_detection_smooth_sigma: 0.10  # 行检测平滑范围（米），玉米行间距大，用较大值
+  row_detection_prominence: 0.03    # 行检测峰突出度，玉米植株较高，用较大值
+  
+  # Height方法专用参数（method=height时生效）
+  height_metric: kernel  # max | mean | percentile_95 | kernel
+  kernel_length: 0.1
+  kernel_width: 0.25
+  kernel_height_percentile: 100
 
-density:
+# 大豆检测配置
+soybean:
+  method: height  # density 或 height
   tile_size: 10.0
-  expected_spacing: 0.08
-  bin_size: 0.005
-  min_prominence: 0.02
+  expected_spacing: 0.01
+  bin_size: 0.01
+  min_prominence: 0.01
+  smooth_sigma: 0.5  # 大豆株间距小，用较小的平滑（如果用density方法）
   remove_ground: true
-  ground_percentile: 30
-  top_percentile: 30
-  apply_sor: true
+  ground_percentile: 20
+  top_percentile: 0
+  apply_sor: false
   sor_k: 20
   sor_std_ratio: 2.0
 
-height:
-  tile_size: 10.0
-  expected_spacing: 0.08
-  bin_size: 0.005
-  min_prominence: 0.02
-  height_metric: max  # 可选: max | mean | percentile_95
-  remove_ground: true
-  ground_percentile: 30
-  top_percentile: 30
-  apply_sor: true
-  sor_k: 20
-  sor_std_ratio: 2.0
+  # Row detection参数（行检测阶段）
+  row_detection_smooth_sigma: 0.05  # 行检测平滑范围（米），大豆行间距小，用较小值
+  row_detection_prominence: 0.02    # 行检测峰突出度，大豆植株较矮，用较小值
+  
+  # Height方法专用参数（method=height时生效）
+  height_metric: kernel  # max | mean | percentile_95 | kernel
+  kernel_length: 0.01
+  kernel_width: 0.25
+  kernel_height_percentile: 95

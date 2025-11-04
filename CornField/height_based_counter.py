@@ -66,36 +66,129 @@ def compute_height_profile(points, direction, bin_size, verbose=False):
     bins = np.linspace(coord_min, coord_max, n_bins + 1)
     bin_centers = (bins[:-1] + bins[1:]) / 2
     
+    # 使用digitize快速分配点到bins
+    bin_indices = np.digitize(coord, bins) - 1
+    bin_indices = np.clip(bin_indices, 0, n_bins - 1)
+    
     # 计算每个bin的高度统计量
     max_heights = np.zeros(n_bins)
     mean_heights = np.zeros(n_bins)
     percentile_95_heights = np.zeros(n_bins)
-    raw_counts = np.zeros(n_bins)
+    raw_counts = np.zeros(n_bins, dtype=np.int32)
     
     for i in range(n_bins):
-        mask = (coord >= bins[i]) & (coord < bins[i+1])
-        raw_counts[i] = np.sum(mask)
+        mask = bin_indices == i
+        count = np.sum(mask)
+        raw_counts[i] = count
         
-        if raw_counts[i] > 0:
+        if count > 0:
             bin_heights = height[mask]
             max_heights[i] = bin_heights.max()
             mean_heights[i] = bin_heights.mean()
             percentile_95_heights[i] = np.percentile(bin_heights, 95)
-        else:
-            # 如果bin为空，使用0或插值（这里用0）
-            max_heights[i] = 0
-            mean_heights[i] = 0
-            percentile_95_heights[i] = 0
     
     if verbose:
         print(f"    Bins: {n_bins}, 范围: [{coord_min:.2f}, {coord_max:.2f}]m")
         print(f"    最大高度范围: [{max_heights.min():.3f}, {max_heights.max():.3f}]m")
-        print(f"    平均高度范围: [{mean_heights.min():.3f}, {mean_heights.max():.3f}]m")
+        print(f"    平均高度范围: [{mean_heights.min():.3f}, {mean_heights.mean():.3f}]m")
     
     return bin_centers, max_heights, mean_heights, percentile_95_heights, raw_counts
 
 
-def detect_plants_from_height(bin_centers, heights, expected_spacing, 
+def compute_height_profile_with_kernel(points, direction, bin_size, 
+                                       kernel_length, kernel_width, 
+                                       kernel_height_percentile, verbose=False):
+    """
+    使用3D kernel沿行中心进行卷积来计算高度曲线
+    
+    参数:
+        points: Nx3点云数组 [x, y, z]
+        direction: 'x' 或 'y'，沿哪个方向计算（行延伸方向）
+        bin_size: 沿行方向的步进大小（米）
+        kernel_length: kernel在行方向上的长度（米）
+        kernel_width: kernel在垂直于行方向上的宽度（米）
+        kernel_height_percentile: 用于提取高度的百分位数（0-100）
+    
+    返回:
+        bin_centers: bin中心坐标
+        kernel_heights: 使用kernel提取的高度曲线
+        raw_counts: 每个bin中kernel内的点数
+    """
+    if verbose:
+        print(f"  使用3D kernel计算沿{direction.upper()}轴的高度曲线...")
+        print(f"    Kernel尺寸: 长度={kernel_length*100:.1f}cm, 宽度={kernel_width*100:.1f}cm")
+        print(f"    高度百分位数: {kernel_height_percentile}%")
+    
+    # 选择坐标轴
+    if direction.lower() == 'x':
+        along_coord = points[:, 0]  # 沿行方向（X）
+        cross_coord = points[:, 1]   # 垂直于行方向（Y）
+        height = points[:, 2]        # Z高度
+    elif direction.lower() == 'y':
+        along_coord = points[:, 1]  # 沿行方向（Y）
+        cross_coord = points[:, 0]   # 垂直于行方向（X）
+        height = points[:, 2]        # Z高度
+    else:
+        raise ValueError("direction必须是 'x' 或 'y'")
+    
+    # 计算行的中心位置（在垂直于行方向上）
+    row_center = cross_coord.mean()
+    half_kernel_width = kernel_width / 2.0
+    
+    # 预先过滤垂直方向的点（只保留kernel宽度内的点）
+    cross_mask = (cross_coord >= row_center - half_kernel_width) & (cross_coord <= row_center + half_kernel_width)
+    along_coord_filtered = along_coord[cross_mask]
+    height_filtered = height[cross_mask]
+    
+    if len(along_coord_filtered) == 0:
+        if verbose:
+            print(f"    警告: kernel宽度内没有点")
+        return np.array([]), np.array([]), np.array([])
+    
+    # 创建沿行方向的bins
+    along_min, along_max = along_coord_filtered.min(), along_coord_filtered.max()
+    n_bins = int(np.ceil((along_max - along_min) / bin_size))
+    
+    if n_bins < 10:
+        if verbose:
+            print(f"    警告: bin数量太少 ({n_bins})")
+        return np.array([]), np.array([]), np.array([])
+    
+    bins = np.linspace(along_min, along_max, n_bins + 1)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    
+    # 对每个bin位置，使用kernel提取局部点云的高度特征
+    kernel_heights = np.zeros(n_bins)
+    raw_counts = np.zeros(n_bins, dtype=np.int32)
+    half_kernel_length = kernel_length / 2.0
+    
+    for i, center_pos in enumerate(bin_centers):
+        # 只需检查沿行方向的范围（垂直方向已经预过滤）
+        mask = (along_coord_filtered >= center_pos - half_kernel_length) & \
+               (along_coord_filtered <= center_pos + half_kernel_length)
+        
+        count = np.sum(mask)
+        raw_counts[i] = count
+        
+        if count > 0:
+            kernel_heights[i] = np.percentile(height_filtered[mask], kernel_height_percentile)
+    
+    # 对空bin进行线性插值处理（快速版本）
+    zero_mask = kernel_heights == 0
+    if np.any(zero_mask) and np.any(~zero_mask):
+        nonzero_indices = np.nonzero(~zero_mask)[0]
+        zero_indices = np.nonzero(zero_mask)[0]
+        kernel_heights[zero_indices] = np.interp(zero_indices, nonzero_indices, kernel_heights[nonzero_indices])
+    
+    if verbose:
+        print(f"    Bins: {n_bins}, 范围: [{along_min:.2f}, {along_max:.2f}]m")
+        print(f"    高度范围: [{kernel_heights.min():.3f}, {kernel_heights.max():.3f}]m")
+        print(f"    平均点数/kernel: {raw_counts.mean():.0f}")
+    
+    return bin_centers, kernel_heights, raw_counts
+
+
+def detect_plants_from_height(bin_centers, heights, expected_spacing,
                               min_prominence, height_metric='max', verbose=False):
     """
     从高度曲线检测植物峰
@@ -118,12 +211,17 @@ def detect_plants_from_height(bin_centers, heights, expected_spacing,
     if len(heights) < 10:
         return np.array([]), np.array([]), heights
     
-    # Step 1: 高斯平滑
-    # sigma选择：覆盖约1-2cm范围
+    # 计算bin大小
     bin_size = bin_centers[1] - bin_centers[0] if len(bin_centers) > 1 else 0.01
-    sigma = 1
     
-    smoothed_heights = gaussian_filter1d(heights, sigma=sigma)
+    # Step 1: 高斯平滑
+    # kernel方法已经做了空间聚合，不需要额外平滑
+    if height_metric == 'kernel':
+        smoothed_heights = heights.copy()
+    else:
+        # 传统方法需要平滑
+        sigma = 1
+        smoothed_heights = gaussian_filter1d(heights, sigma=sigma)
     
     # Step 2: 峰检测
     # distance参数：预期株间距对应的bin数
@@ -213,17 +311,23 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
     # 中图：使用的高度曲线（放大显示）
     ax2 = axes[1]
     # 根据height_metric选择显示哪个
-    if height_metric == 'max':
+    if height_metric == 'kernel':
+        raw_heights = max_heights  # kernel方法中，max_heights就是kernel_heights
+        metric_label = 'Kernel'
+    elif height_metric == 'max':
         raw_heights = max_heights
+        metric_label = 'Max'
     elif height_metric == 'mean':
         raw_heights = mean_heights
+        metric_label = 'Mean'
     else:  # percentile_95
         raw_heights = percentile_95_heights
+        metric_label = 'Percentile 95'
     
     ax2.plot(bin_centers, raw_heights, 'b-', linewidth=0.8, alpha=0.4, 
-            label=f'Raw {height_metric.capitalize()} Height')
+            label=f'Raw {metric_label} Height')
     ax2.plot(bin_centers, smoothed_heights, 'b-', linewidth=2, 
-            label=f'Smoothed {height_metric.capitalize()} Height')
+            label=f'Smoothed {metric_label} Height')
     
     # 标记峰位置
     if len(peak_positions) > 0:
@@ -237,7 +341,7 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
     
     ax2.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=12)
     ax2.set_ylabel('Height (m)', fontsize=12)
-    ax2.set_title(f'{height_metric.capitalize()} Height Profile (Detection Basis)', 
+    ax2.set_title(f'{metric_label} Height Profile (Detection Basis)', 
                   fontsize=13, fontweight='bold')
     ax2.grid(True, alpha=0.3)
     ax2.legend(loc='upper right', fontsize=11)
@@ -268,8 +372,9 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
 def height_count_from_row(points, direction, expected_spacing, 
                           bin_size, apply_sor, sor_k, sor_std_ratio,
                           remove_ground, ground_percentile, top_percentile,
-                          min_prominence, height_metric, output_dir, row_center=None,
-                          row_status: str | None = None, verbose: bool = False):
+                          min_prominence, height_metric, output_dir, 
+                          kernel_length=None, kernel_width=None, kernel_height_percentile=None,
+                          row_center=None, row_status: str | None = None, verbose: bool = False):
     """
     从单行点云中基于高度检测并计数植物
     
@@ -285,8 +390,11 @@ def height_count_from_row(points, direction, expected_spacing,
         ground_percentile: 移除底部百分比
         top_percentile: 移除顶部百分比
         min_prominence: 最小峰突出度（相对值）
-        height_metric: 使用哪个高度指标 ('max', 'mean', 'percentile_95')
+        height_metric: 使用哪个高度指标 ('max', 'mean', 'percentile_95', 'kernel')
         output_dir: 可视化输出目录
+        kernel_length: kernel在行方向上的长度（米），仅在height_metric='kernel'时使用
+        kernel_width: kernel在垂直于行方向上的宽度（米），仅在height_metric='kernel'时使用
+        kernel_height_percentile: kernel内高度的百分位数（0-100），仅在height_metric='kernel'时使用
         row_center: 行的中心坐标（用于计算完整XY坐标），如果为None则使用点云均值
     
     返回:
@@ -303,42 +411,64 @@ def height_count_from_row(points, direction, expected_spacing,
         print(f"预期株间距: {expected_spacing*100:.0f}cm")
         print(f"高度指标: {height_metric}")
     
-    # 保存原始点云（用于后续高度计算）
-    original_points = points.copy()
+    # Step 1: 统计离群点移除（可选）
+    if apply_sor:
+        points, _ = statistical_outlier_removal(points, k=sor_k, std_ratio=sor_std_ratio)
     
-    # Step 1: 移除地面点和顶部点
+    # 保存SOR后的点云（用于后续高度计算）
+    sor_cleaned_points = points.copy()
+    
+    # Step 2: 移除地面点和顶部点
     if remove_ground:
         points, _ = remove_ground_points(points, bottom_percentile=ground_percentile, 
                                         top_percentile=top_percentile)
-    
-    # Step 2: 统计离群点移除（可选）
-    if apply_sor:
-        points, _ = statistical_outlier_removal(points, k=sor_k, std_ratio=sor_std_ratio)
     
     if len(points) < 50:
         print("错误: 点数太少，无法进行分析")
         return 0, np.array([]), {}
     
     # Step 3: 计算高度曲线
-    bin_centers, max_heights, mean_heights, percentile_95_heights, raw_counts = compute_height_profile(
-        points, direction=direction, bin_size=bin_size, verbose=verbose
-    )
-    
-    if len(max_heights) == 0:
-        print("错误: 无法计算高度曲线")
-        return 0, np.array([]), {}
-    
-    # Step 4: 选择使用哪个高度指标进行峰检测
-    if height_metric == 'max':
-        heights_for_detection = max_heights
-    elif height_metric == 'mean':
-        heights_for_detection = mean_heights
-    elif height_metric == 'percentile_95':
-        heights_for_detection = percentile_95_heights
+    if height_metric == 'kernel':
+        # 使用3D kernel卷积方法
+        if kernel_length is None or kernel_width is None or kernel_height_percentile is None:
+            print("错误: height_metric='kernel'时必须提供kernel_length, kernel_width, kernel_height_percentile")
+            return 0, np.array([]), {}
+        
+        bin_centers, heights_for_detection, raw_counts = compute_height_profile_with_kernel(
+            points, direction=direction, bin_size=bin_size,
+            kernel_length=kernel_length, kernel_width=kernel_width,
+            kernel_height_percentile=kernel_height_percentile, verbose=verbose
+        )
+        
+        if len(heights_for_detection) == 0:
+            print("错误: 无法计算kernel高度曲线")
+            return 0, np.array([]), {}
+        
+        # 为了兼容可视化，创建虚拟的其他高度数组
+        max_heights = heights_for_detection.copy()
+        mean_heights = heights_for_detection.copy()
+        percentile_95_heights = heights_for_detection.copy()
     else:
-        print(f"警告: 未知的height_metric '{height_metric}'，使用'max'")
-        heights_for_detection = max_heights
-        height_metric = 'max'
+        # 使用传统的2D投影方法
+        bin_centers, max_heights, mean_heights, percentile_95_heights, raw_counts = compute_height_profile(
+            points, direction=direction, bin_size=bin_size, verbose=verbose
+        )
+        
+        if len(max_heights) == 0:
+            print("错误: 无法计算高度曲线")
+            return 0, np.array([]), {}
+        
+        # Step 4: 选择使用哪个高度指标进行峰检测
+        if height_metric == 'max':
+            heights_for_detection = max_heights
+        elif height_metric == 'mean':
+            heights_for_detection = mean_heights
+        elif height_metric == 'percentile_95':
+            heights_for_detection = percentile_95_heights
+        else:
+            print(f"警告: 未知的height_metric '{height_metric}'，使用'max'")
+            heights_for_detection = max_heights
+            height_metric = 'max'
     
     # Step 5: 峰检测
     peak_positions, peak_heights, smoothed_heights = detect_plants_from_height(
@@ -351,15 +481,16 @@ def height_count_from_row(points, direction, expected_spacing,
     
     plant_count = len(peak_positions)
     
-    # Step 6: 计算实际高度（使用原始点云）
-    if plant_count > 0 and verbose:
-        print(f"  计算植物实际高度（使用原始点云）...")
-        actual_heights = calculate_peak_heights(original_points, peak_positions, direction)
+    # Step 6: 计算实际高度（使用SOR后但未掐头去尾的点云）
+    if plant_count > 0:
+        if verbose:
+            print(f"  计算植物实际高度（使用SOR后的完整点云）...")
+        actual_heights = calculate_peak_heights(sor_cleaned_points, peak_positions, direction)
         if verbose:
             print(f"    高度范围: [{actual_heights.min():.3f}, {actual_heights.max():.3f}]m")
             print(f"    平均高度: {actual_heights.mean():.3f}m")
     else:
-        actual_heights = calculate_peak_heights(original_points, peak_positions, direction) if plant_count > 0 else np.array([])
+        actual_heights = np.array([])
     
     # 生成可视化（如果指定了输出目录）
     if output_dir is not None:
@@ -468,7 +599,10 @@ def main():
         print("  --spacing FLOAT     预期株间距（米）（默认: 0.08）")
         print("  --bin_size FLOAT    bin大小（米）（默认: 0.005）")
         print("  --prominence FLOAT  峰突出度阈值（相对值）（默认: 0.02）")
-        print("  --height_metric STR 使用的高度指标: max|mean|percentile_95 (默认: max)")
+        print("  --height_metric STR 使用的高度指标: max|mean|percentile_95|kernel (默认: max)")
+        print("  --kernel_length FLOAT  Kernel长度（米）（仅kernel模式，默认: 0.08）")
+        print("  --kernel_width FLOAT   Kernel宽度（米）（仅kernel模式，默认: 0.15）")
+        print("  --kernel_percentile INT Kernel高度百分位（仅kernel模式，默认: 90）")
         print("  --output DIR        可视化输出目录（默认: height_results）")
         print("  --no-ground         不移除地面点和顶部点")
         print("  --ground_pct FLOAT  地面移除百分比（默认: 30）")
@@ -480,6 +614,7 @@ def main():
         print("  python height_based_counter.py row_points.las")
         print("  python height_based_counter.py row_points.las --direction x --spacing 0.3")
         print("  python height_based_counter.py row_points.las --height_metric percentile_95")
+        print("  python height_based_counter.py row_points.las --height_metric kernel")
         print("  python height_based_counter.py row_points.las --output my_results/")
         sys.exit(1)
     
@@ -492,6 +627,9 @@ def main():
     bin_size = 0.005
     min_prominence = 0.02
     height_metric = 'max'
+    kernel_length = 0.08
+    kernel_width = 0.15
+    kernel_height_percentile = 90
     output_dir = 'height_results'
     remove_ground = True
     ground_percentile = 30
@@ -527,9 +665,24 @@ def main():
         idx = sys.argv.index('--height_metric')
         if idx + 1 < len(sys.argv):
             height_metric = sys.argv[idx + 1].lower()
-            if height_metric not in ['max', 'mean', 'percentile_95']:
-                print("错误: height_metric必须是 'max', 'mean', 或 'percentile_95'")
+            if height_metric not in ['max', 'mean', 'percentile_95', 'kernel']:
+                print("错误: height_metric必须是 'max', 'mean', 'percentile_95', 或 'kernel'")
                 sys.exit(1)
+    
+    if '--kernel_length' in sys.argv:
+        idx = sys.argv.index('--kernel_length')
+        if idx + 1 < len(sys.argv):
+            kernel_length = float(sys.argv[idx + 1])
+    
+    if '--kernel_width' in sys.argv:
+        idx = sys.argv.index('--kernel_width')
+        if idx + 1 < len(sys.argv):
+            kernel_width = float(sys.argv[idx + 1])
+    
+    if '--kernel_percentile' in sys.argv:
+        idx = sys.argv.index('--kernel_percentile')
+        if idx + 1 < len(sys.argv):
+            kernel_height_percentile = int(sys.argv[idx + 1])
     
     if '--output' in sys.argv:
         idx = sys.argv.index('--output')
@@ -597,6 +750,9 @@ def main():
         top_percentile=top_percentile,
         min_prominence=min_prominence,
         height_metric=height_metric,
+        kernel_length=kernel_length if height_metric == 'kernel' else None,
+        kernel_width=kernel_width if height_metric == 'kernel' else None,
+        kernel_height_percentile=kernel_height_percentile if height_metric == 'kernel' else None,
         output_dir=output_dir,
         verbose=True
     )
