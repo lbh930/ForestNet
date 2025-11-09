@@ -27,11 +27,25 @@ python density_based_counter.py row_split_output\tile_0_4\row_y08_at_25.75m.las 
 cd C:/ForestNet/Cornfield
 conda activate corn-density-env
 
-# Density-based方法
-python crop_pipeline.py data/ifarm_corn.las --method density
+# Corn 方法
+python crop_pipeline.py data/ifarm_corn.las --crop corn
+python crop_pipeline.py data/morrow_plots.las --crop corn
+python crop_pipeline.py data/0822_corn.las --crop corn
 
-# Height-based方法
-python crop_pipeline.py data/ifarm_soybean_2.las --method height
+# Soybean方法
+python crop_pipeline.py data/ifarm_soybean_green.las --crop soybean
+python crop_pipeline.py data/ifarm_soybean_yellow.las --crop soybean
+python crop_pipeline.py data/ifarm_soybean_green_east.las --crop soybean
+python crop_pipeline.py data/ifarm_soybean_green_west.las --crop soybean
+python crop_pipeline.py data/ifarm_soybean_yellow_east.las --crop soybean
+python crop_pipeline.py data/ifarm_soybean_yellow_west.las --crop soybean
+
+# leaf density estimation
+python leaf_density_estimator.py row_split_output\ifarm_corn\tile_1_1
+python leaf_density_estimator.py row_split_output\morrow_plots\tile_1_0
+python leaf_density_estimator.py row_split_output\0822_corn\tile_2_2
+python leaf_density_estimator.py row_split_output/ifarm_soybean_2/tile_0_0
+python leaf_density_estimator.py row_split_output/ifarm_soybean_2/tile_0_0
 
 # 使用自定义配置
 python crop_pipeline.py corn.las --method density --config my_config.yaml

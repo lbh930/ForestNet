@@ -370,8 +370,9 @@ def save_summary_yaml(output_path, summary_data):
 def main():
     """主函数"""
     if len(sys.argv) < 2:
-        print("用法: python leaf_density_estimator.py <las文件路径> [选项]")
+        print("用法: python leaf_density_estimator.py <las文件或文件夹路径> [选项]")
         print("示例: python leaf_density_estimator.py row_x01.las --vx 0.05 --vy 0.05 --vz 0.03")
+        print("      python leaf_density_estimator.py ./tile_0_0/ --vx 0.05")
         print("\n选项:")
         print("  --vx <float>   水平体素尺寸X (默认: 0.05m)")
         print("  --vy <float>   水平体素尺寸Y (默认: 0.05m)")
@@ -380,7 +381,7 @@ def main():
         print("  --ground <float>  地面移除百分比 (默认: 10%)")
         sys.exit(1)
     
-    las_path = Path(sys.argv[1])
+    input_path = Path(sys.argv[1])
     
     # 解析参数
     vx = 0.05  # 默认5cm
@@ -414,8 +415,8 @@ def main():
         if idx + 1 < len(sys.argv):
             ground_percentile = float(sys.argv[idx + 1])
     
-    if not las_path.exists():
-        print(f"错误: 文件不存在: {las_path}")
+    if not input_path.exists():
+        print(f"错误: 路径不存在: {input_path}")
         sys.exit(1)
     
     print("="*60)
@@ -423,96 +424,183 @@ def main():
     print("="*60)
     total_t0 = time.time()
     
+    # 判断输入是文件还是文件夹
+    if input_path.is_file():
+        # 单个文件模式
+        las_files = [input_path]
+        output_base_dir = input_path.parent / "leaf_density_results"
+    elif input_path.is_dir():
+        # 文件夹模式：查找所有.las文件
+        las_files = sorted(input_path.glob("*.las"))
+        if len(las_files) == 0:
+            print(f"错误: 文件夹中没有找到.las文件: {input_path}")
+            sys.exit(1)
+        output_base_dir = input_path / "leaf_density_results"
+    else:
+        print(f"错误: 无效的输入路径: {input_path}")
+        sys.exit(1)
+    
+    print(f"\n找到 {len(las_files)} 个.las文件")
+    for las_file in las_files:
+        print(f"  - {las_file.name}")
+    
     # 创建输出目录
-    output_dir = las_path.parent / "leaf_density_results"
-    if output_dir.exists():
+    if output_base_dir.exists():
         import shutil
-        shutil.rmtree(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+        shutil.rmtree(output_base_dir)
+    output_base_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"\n输出目录: {output_dir}")
+    print(f"\n输出目录: {output_base_dir}")
     
-    # 1. 读取点云
-    x, y, z = read_las_file(las_path)
-    n_input = len(x)
+    # 处理所有文件并收集LAI
+    all_lai_values = []
+    all_results = []
     
-    # 2. 移除地面
-    x, y, z = remove_ground_simple(x, y, z, bottom_percentile=ground_percentile)
-    n_filtered = len(x)
+    for file_idx, las_path in enumerate(las_files, 1):
+        print(f"\n{'='*60}")
+        print(f"处理文件 {file_idx}/{len(las_files)}: {las_path.name}")
+        print(f"{'='*60}")
+        
+        # 为每个文件创建子目录
+        file_output_dir = output_base_dir / las_path.stem
+        file_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            # 1. 读取点云
+            x, y, z = read_las_file(las_path)
+            n_input = len(x)
+            
+            # 2. 移除地面
+            x, y, z = remove_ground_simple(x, y, z, bottom_percentile=ground_percentile)
+            n_filtered = len(x)
+            
+            # 3. 体素化
+            voxel_grid, voxel_counts, grid_info = voxelize_point_cloud(x, y, z, vx, vy, vz)
+            
+            # 4. 计算穿透率
+            z_indices, p_gap, occupancy = compute_gap_probability(voxel_grid)
+            
+            # 5. 计算LAD
+            lad = compute_lad_beer_lambert(p_gap, vz, G=G)
+            
+            # 6. 计算LAI (Leaf Area Index)
+            lai_total = np.sum(lad) * vz
+            all_lai_values.append(lai_total)
+            
+            print(f"\n叶面积指数 (LAI):")
+            print(f"  LAI = {lai_total:.3f} m²/m²")
+            
+            # 7. 统计
+            valid_lad = lad[lad > 0]
+            lad_mean = valid_lad.mean() if len(valid_lad) > 0 else 0.0
+            lad_median = np.median(valid_lad) if len(valid_lad) > 0 else 0.0
+            lad_max = valid_lad.max() if len(valid_lad) > 0 else 0.0
+            lad_std = valid_lad.std() if len(valid_lad) > 0 else 0.0
+            
+            # 8. 可视化
+            plot_vertical_profiles(z_indices, p_gap, occupancy, lad, grid_info, file_output_dir)
+            plot_voxel_visualization(voxel_grid, grid_info, file_output_dir)
+            
+            # 9. 准备高度层详细数据
+            z_actual = grid_info['z_min'] + (z_indices + 0.5) * vz
+            height_layers = []
+            for i, (z_val, lad_val, occ_val, pgap_val) in enumerate(zip(z_actual, lad, occupancy, p_gap)):
+                height_layers.append({
+                    'layer_index': int(i),
+                    'height_m': float(z_val),
+                    'lad_m2_m3': float(lad_val),
+                    'occupancy': float(occ_val),
+                    'gap_probability': float(pgap_val),
+                })
+            
+            # 10. 保存单个文件的YAML摘要
+            summary_data = {
+                'input_file': str(las_path.name),
+                'input_points': n_input,
+                'filtered_points': n_filtered,
+                'occupied_voxels': int(np.sum(voxel_grid)),
+                'total_voxels': int(voxel_grid.size),
+                'vx': vx,
+                'vy': vy,
+                'vz': vz,
+                'G': G,
+                'bottom_percentile': ground_percentile,
+                'lad_mean': lad_mean,
+                'lad_median': lad_median,
+                'lad_max': lad_max,
+                'lad_std': lad_std,
+                'lai_total': lai_total,
+                'height_layers': height_layers,
+            }
+            
+            yaml_path = file_output_dir / "leaf_summary.yaml"
+            save_summary_yaml(yaml_path, summary_data)
+            
+            # 记录结果
+            all_results.append({
+                'filename': las_path.name,
+                'lai': lai_total,
+                'lad_mean': lad_mean,
+                'lad_max': lad_max,
+                'input_points': n_input,
+                'filtered_points': n_filtered,
+            })
+            
+            print(f"✓ {las_path.name} 处理完成")
+            
+        except Exception as e:
+            print(f"✗ 处理 {las_path.name} 时出错: {e}")
+            continue
     
-    # 3. 体素化
-    voxel_grid, voxel_counts, grid_info = voxelize_point_cloud(x, y, z, vx, vy, vz)
-    
-    # 4. 计算穿透率
-    z_indices, p_gap, occupancy = compute_gap_probability(voxel_grid)
-    
-    # 5. 计算LAD
-    lad = compute_lad_beer_lambert(p_gap, vz, G=G)
-    
-    # 6. 计算LAI (Leaf Area Index)
-    # LAI = 积分 LAD(z) dz
-    lai_total = np.sum(lad) * vz
-    
-    print(f"\n叶面积指数 (LAI):")
-    print(f"  LAI = {lai_total:.3f} m²/m²")
-    
-    # 7. 统计
-    valid_lad = lad[lad > 0]
-    lad_mean = valid_lad.mean() if len(valid_lad) > 0 else 0.0
-    lad_median = np.median(valid_lad) if len(valid_lad) > 0 else 0.0
-    lad_max = valid_lad.max() if len(valid_lad) > 0 else 0.0
-    lad_std = valid_lad.std() if len(valid_lad) > 0 else 0.0
-    
-    # 8. 可视化
-    plot_vertical_profiles(z_indices, p_gap, occupancy, lad, grid_info, output_dir)
-    plot_voxel_visualization(voxel_grid, grid_info, output_dir)
-    
-    # 9. 准备高度层详细数据
-    z_actual = grid_info['z_min'] + (z_indices + 0.5) * vz
-    height_layers = []
-    for i, (z_val, lad_val, occ_val, pgap_val) in enumerate(zip(z_actual, lad, occupancy, p_gap)):
-        height_layers.append({
-            'layer_index': int(i),
-            'height_m': float(z_val),
-            'lad_m2_m3': float(lad_val),
-            'occupancy': float(occ_val),
-            'gap_probability': float(pgap_val),
-        })
-    
-    # 10. 保存YAML摘要
-    summary_data = {
-        'input_file': str(las_path.name),
-        'input_points': n_input,
-        'filtered_points': n_filtered,
-        'occupied_voxels': int(np.sum(voxel_grid)),
-        'total_voxels': int(voxel_grid.size),
-        'vx': vx,
-        'vy': vy,
-        'vz': vz,
-        'G': G,
-        'bottom_percentile': ground_percentile,
-        'lad_mean': lad_mean,
-        'lad_median': lad_median,
-        'lad_max': lad_max,
-        'lad_std': lad_std,
-        'lai_total': lai_total,
-        'height_layers': height_layers,
-    }
-    
-    yaml_path = output_dir / "leaf_summary.yaml"
-    save_summary_yaml(yaml_path, summary_data)
-    
-    # 11. 总结
-    print("\n" + "="*60)
-    print("处理完成")
-    print("="*60)
-    print(f"输入点数: {n_input:,}")
-    print(f"过滤后点数: {n_filtered:,}")
-    print(f"体素分辨率: {vx}m x {vy}m x {vz}m")
-    print(f"占用体素: {np.sum(voxel_grid):,} / {voxel_grid.size:,}")
-    print(f"LAD统计: 平均={lad_mean:.4f}, 中位数={lad_median:.4f}, 最大={lad_max:.4f} m²/m³")
-    print(f"LAI估计: {lai_total:.3f} m²/m²")
-    print(f"输出目录: {output_dir.absolute()}")
+    # 11. 计算汇总统计
+    if len(all_lai_values) > 0:
+        mean_lai = np.mean(all_lai_values)
+        median_lai = np.median(all_lai_values)
+        std_lai = np.std(all_lai_values)
+        min_lai = np.min(all_lai_values)
+        max_lai = np.max(all_lai_values)
+        
+        print("\n" + "="*60)
+        print("汇总统计 - 所有文件")
+        print("="*60)
+        print(f"成功处理文件数: {len(all_lai_values)} / {len(las_files)}")
+        print(f"\nLAI统计:")
+        print(f"  平均LAI: {mean_lai:.3f} m²/m²")
+        print(f"  中位数LAI: {median_lai:.3f} m²/m²")
+        print(f"  标准差: {std_lai:.3f} m²/m²")
+        print(f"  范围: [{min_lai:.3f}, {max_lai:.3f}] m²/m²")
+        
+        print(f"\n各文件LAI详情:")
+        for result in all_results:
+            print(f"  {result['filename']:40s} LAI={result['lai']:.3f} m²/m²")
+        
+        # 保存汇总YAML
+        summary_yaml_data = {
+            'aggregate_summary': {
+                'total_files_processed': len(all_lai_values),
+                'total_files_found': len(las_files),
+                'parameters': {
+                    'voxel_size': {'vx_m': vx, 'vy_m': vy, 'vz_m': vz},
+                    'projection_function_G': G,
+                    'ground_removal_percentile': ground_percentile,
+                },
+                'lai_statistics': {
+                    'mean_m2_m2': float(mean_lai),
+                    'median_m2_m2': float(median_lai),
+                    'std_m2_m2': float(std_lai),
+                    'min_m2_m2': float(min_lai),
+                    'max_m2_m2': float(max_lai),
+                },
+                'individual_files': all_results,
+            }
+        }
+        
+        aggregate_yaml_path = output_base_dir / "aggregate_summary.yaml"
+        with open(aggregate_yaml_path, 'w', encoding='utf-8') as f:
+            yaml.dump(summary_yaml_data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        print(f"\n汇总结果已保存: {aggregate_yaml_path}")
+        
+    print(f"\n输出目录: {output_base_dir.absolute()}")
     print(f"总耗时: {time.time()-total_t0:.2f}秒")
     print("="*60)
 

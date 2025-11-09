@@ -267,7 +267,7 @@ def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
 def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
                             x_centers, x_peaks, y_centers, y_peaks,
                             chosen_direction, output_prefix, boundaries=None):
-    """生成CHM可视化（使用预计算的平滑CHM）"""
+    """生成CHM可视化（使用预计算的平滑CHM）- 生成两张图：带分割线和不带分割线"""
     print("  生成CHM可视化...")
     t0 = time.time()
     
@@ -288,50 +288,34 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
         fig_height = 8
         fig_width = fig_height / aspect_ratio
     
-    # 创建figure
+    # 准备行信息和图例元素
+    if chosen_direction == 'x' and len(x_peaks) > 0:
+        direction_label = f'X-axis rows (n={len(x_peaks)}) [SELECTED]'
+        row_count_str = f'{len(x_peaks)} X-rows'
+    elif chosen_direction == 'y' and len(y_peaks) > 0:
+        direction_label = f'Y-axis rows (n={len(y_peaks)}) [SELECTED]'
+        row_count_str = f'{len(y_peaks)} Y-rows'
+    else:
+        direction_label = 'No rows detected'
+        row_count_str = '0 rows'
+    
+    # ============= 第一张图：不带分割线 =============
     fig, ax = plt.subplots(1, 1, figsize=(fig_width, fig_height))
     
-    # 显示CHM，设置aspect='equal'保持真实比例
+    # 显示CHM
     im = ax.imshow(chm_smoothed, extent=[x_min, x_max, y_min, y_max], 
                    origin='lower', cmap='terrain', aspect='equal', 
                    interpolation='bilinear', alpha=0.9)
     
-    # 只叠加选中方向的rows
+    # 只叠加选中方向的行中心线（蓝色）
     if chosen_direction == 'x' and len(x_peaks) > 0:
         for peak_idx in x_peaks:
             x_pos = x_centers[peak_idx]
             ax.axvline(x=x_pos, color='blue', linewidth=1.5, alpha=0.8, linestyle='-')
-        direction_label = f'X-axis rows (n={len(x_peaks)}) [SELECTED]'
-        row_count_str = f'{len(x_peaks)} X-rows'
-        
-        # 绘制边界曲线（红色细虚线）
-        if boundaries is not None and len(boundaries) > 0:
-            for boundary in boundaries:
-                y_along = boundary['along']
-                x_min = boundary['across_min']
-                x_max = boundary['across_max']
-                ax.plot(x_min, y_along, 'r--', linewidth=0.5, alpha=0.6)
-                ax.plot(x_max, y_along, 'r--', linewidth=0.5, alpha=0.6)
-        
     elif chosen_direction == 'y' and len(y_peaks) > 0:
         for peak_idx in y_peaks:
             y_pos = y_centers[peak_idx]
             ax.axhline(y=y_pos, color='blue', linewidth=1.5, alpha=0.8, linestyle='-')
-        direction_label = f'Y-axis rows (n={len(y_peaks)}) [SELECTED]'
-        row_count_str = f'{len(y_peaks)} Y-rows'
-        
-        # 绘制边界曲线（红色细虚线）
-        if boundaries is not None and len(boundaries) > 0:
-            for boundary in boundaries:
-                x_along = boundary['along']
-                y_min = boundary['across_min']
-                y_max = boundary['across_max']
-                ax.plot(x_along, y_min, 'r--', linewidth=0.5, alpha=0.6)
-                ax.plot(x_along, y_max, 'r--', linewidth=0.5, alpha=0.6)
-        
-    else:
-        direction_label = 'No rows detected'
-        row_count_str = '0 rows'
     
     ax.set_xlabel('X Coordinate (m)', fontsize=13)
     ax.set_ylabel('Y Coordinate (m)', fontsize=13)
@@ -342,25 +326,87 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label('Height (m)', fontsize=12)
     
-    # 图例
+    # 图例（不带边界）
     from matplotlib.lines import Line2D
+    if chosen_direction in ['x', 'y'] and (len(x_peaks) > 0 or len(y_peaks) > 0):
+        legend_elements = [
+            Line2D([0], [0], color='blue', linewidth=2.5, label=direction_label)
+        ]
+        ax.legend(handles=legend_elements, loc='upper right', fontsize=11, 
+                 framealpha=0.9, edgecolor='black')
+    
+    ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
+    plt.tight_layout()
+    
+    output_file_no_boundaries = f"{output_prefix}_chm.png"
+    plt.savefig(output_file_no_boundaries, dpi=600, bbox_inches='tight')
+    plt.close(fig)
+    print(f"  CHM已保存（无边界）: {output_file_no_boundaries}")
+    
+    # ============= 第二张图：带分割线 =============
+    fig, ax = plt.subplots(1, 1, figsize=(fig_width, fig_height))
+    
+    # 显示CHM
+    im = ax.imshow(chm_smoothed, extent=[x_min, x_max, y_min, y_max], 
+                   origin='lower', cmap='terrain', aspect='equal', 
+                   interpolation='bilinear', alpha=0.9)
+    
+    # 叠加行中心线（蓝色）
+    if chosen_direction == 'x' and len(x_peaks) > 0:
+        for peak_idx in x_peaks:
+            x_pos = x_centers[peak_idx]
+            ax.axvline(x=x_pos, color='blue', linewidth=1.5, alpha=0.8, linestyle='-')
+        
+        # 绘制边界曲线（红色虚线，稍微粗一点）
+        if boundaries is not None and len(boundaries) > 0:
+            for boundary in boundaries:
+                y_along = boundary['along']
+                x_min_bound = boundary['across_min']
+                x_max_bound = boundary['across_max']
+                ax.plot(x_min_bound, y_along, 'r--', linewidth=1.0, alpha=0.7)
+                ax.plot(x_max_bound, y_along, 'r--', linewidth=1.0, alpha=0.7)
+        
+    elif chosen_direction == 'y' and len(y_peaks) > 0:
+        for peak_idx in y_peaks:
+            y_pos = y_centers[peak_idx]
+            ax.axhline(y=y_pos, color='blue', linewidth=1.5, alpha=0.8, linestyle='-')
+        
+        # 绘制边界曲线（红色虚线，稍微粗一点）
+        if boundaries is not None and len(boundaries) > 0:
+            for boundary in boundaries:
+                x_along = boundary['along']
+                y_min_bound = boundary['across_min']
+                y_max_bound = boundary['across_max']
+                ax.plot(x_along, y_min_bound, 'r--', linewidth=1.0, alpha=0.7)
+                ax.plot(x_along, y_max_bound, 'r--', linewidth=1.0, alpha=0.7)
+    
+    ax.set_xlabel('X Coordinate (m)', fontsize=13)
+    ax.set_ylabel('Y Coordinate (m)', fontsize=13)
+    ax.set_title(f'Canopy Height Model with Crop Rows and Boundaries\n{row_count_str}',
+                 fontsize=14, fontweight='bold', pad=15)
+    
+    # Colorbar
+    cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label('Height (m)', fontsize=12)
+    
+    # 图例（带边界）
     legend_elements = []
-    if chosen_direction == 'x':
+    if chosen_direction == 'x' and len(x_peaks) > 0:
         legend_elements.append(
             Line2D([0], [0], color='blue', linewidth=2.5, label=direction_label)
         )
         if boundaries is not None and len(boundaries) > 0:
             legend_elements.append(
-                Line2D([0], [0], color='red', linewidth=0.5, linestyle='--', 
+                Line2D([0], [0], color='red', linewidth=1.0, linestyle='--', 
                        label=f'Row boundaries (n={len(boundaries)+1})')
             )
-    elif chosen_direction == 'y':
+    elif chosen_direction == 'y' and len(y_peaks) > 0:
         legend_elements.append(
             Line2D([0], [0], color='blue', linewidth=2.5, label=direction_label)
         )
         if boundaries is not None and len(boundaries) > 0:
             legend_elements.append(
-                Line2D([0], [0], color='red', linewidth=0.5, linestyle='--', 
+                Line2D([0], [0], color='red', linewidth=1.0, linestyle='--', 
                        label=f'Row boundaries (n={len(boundaries)+1})')
             )
     
@@ -369,14 +415,14 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
                  framealpha=0.9, edgecolor='black')
     
     ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
-    
     plt.tight_layout()
     
-    output_file = f"{output_prefix}_chm.png"
-    plt.savefig(output_file, dpi=600, bbox_inches='tight')
+    output_file_with_boundaries = f"{output_prefix}_chm_with_boundaries.png"
+    plt.savefig(output_file_with_boundaries, dpi=600, bbox_inches='tight')
     plt.close(fig)
+    print(f"  CHM已保存（带边界）: {output_file_with_boundaries}")
     
-    print(f"  CHM已保存: {output_file} (耗时: {time.time()-t0:.2f}s)")
+    print(f"  CHM可视化完成 (耗时: {time.time()-t0:.2f}s)")
 
 
 def create_smoothed_chm(tile_x, tile_y, tile_z, resolution=0.02):
