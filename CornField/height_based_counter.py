@@ -266,7 +266,7 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
                              peak_positions, peak_heights, raw_counts,
                              output_path, direction, height_metric, verbose=False):
     """
-    可视化高度曲线和检测结果
+    可视化高度曲线和检测结果（生成两个独立的图片）
     
     参数:
         bin_centers: bin中心坐标
@@ -277,14 +277,17 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
         peak_positions: 峰位置
         peak_heights: 峰高度值
         raw_counts: 原始点数
-        output_path: 输出文件路径
+        output_path: 输出文件路径（基础路径，会自动添加后缀）
         direction: 方向轴
         height_metric: 使用的高度指标
     """
-    fig, axes = plt.subplots(3, 1, figsize=(14, 12))
+    # 确定输出路径（去掉可能的扩展名，准备添加后缀）
+    output_path = Path(output_path)
+    base_path = output_path.parent / output_path.stem
     
-    # 上图：高度曲线对比
-    ax1 = axes[0]
+    # 图1：kernel处理前 - 高度曲线对比
+    fig1, ax1 = plt.subplots(1, 1, figsize=(14, 6))
+    
     ax1.plot(bin_centers, max_heights, 'r-', linewidth=1, alpha=0.3, label='Max Height')
     ax1.plot(bin_centers, percentile_95_heights, 'orange', linewidth=1, alpha=0.5, label='95th Percentile Height')
     ax1.plot(bin_centers, mean_heights, 'b-', linewidth=1, alpha=0.4, label='Mean Height')
@@ -301,33 +304,26 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
         for pos in peak_positions:
             ax1.axvline(pos, color='red', linestyle='--', linewidth=1, alpha=0.3)
     
-    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=12)
-    ax1.set_ylabel('Height (m)', fontsize=12)
-    ax1.set_title(f'Plant Detection from Height Profile along {direction.upper()}-axis', 
-                  fontsize=13, fontweight='bold')
+    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=25)
+    ax1.set_ylabel('Height (m)', fontsize=25)
     ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='upper right', fontsize=10)
+    ax1.legend(loc='upper right', fontsize=25)
+    ax1.tick_params(axis='both', which='major', labelsize=25)
     
-    # 中图：使用的高度曲线（放大显示）
-    ax2 = axes[1]
-    # 根据height_metric选择显示哪个
-    if height_metric == 'kernel':
-        raw_heights = max_heights  # kernel方法中，max_heights就是kernel_heights
-        metric_label = 'Kernel'
-    elif height_metric == 'max':
-        raw_heights = max_heights
-        metric_label = 'Max'
-    elif height_metric == 'mean':
-        raw_heights = mean_heights
-        metric_label = 'Mean'
-    else:  # percentile_95
-        raw_heights = percentile_95_heights
-        metric_label = 'Percentile 95'
+    plt.tight_layout()
+    output_path_1 = f"{base_path}_before_kernel.png"
+    plt.savefig(output_path_1, dpi=300, bbox_inches='tight')
+    plt.close(fig1)
     
-    ax2.plot(bin_centers, raw_heights, 'b-', linewidth=0.8, alpha=0.4, 
-            label=f'Raw {metric_label} Height')
+    if verbose:
+        print(f"  可视化已保存: {output_path_1}")
+    
+    # 图2：kernel处理后 - 使用的高度曲线
+    fig2, ax2 = plt.subplots(1, 1, figsize=(14, 6))
+    
+    # 只显示最终用于检测的kernel processed height
     ax2.plot(bin_centers, smoothed_heights, 'b-', linewidth=2, 
-            label=f'Smoothed {metric_label} Height')
+            label='Kernel Processed Height')
     
     # 标记峰位置
     if len(peak_positions) > 0:
@@ -339,34 +335,19 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
         for pos in peak_positions:
             ax2.axvline(pos, color='red', linestyle='--', linewidth=1, alpha=0.3)
     
-    ax2.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=12)
-    ax2.set_ylabel('Height (m)', fontsize=12)
-    ax2.set_title(f'{metric_label} Height Profile (Detection Basis)', 
-                  fontsize=13, fontweight='bold')
+    ax2.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=25)
+    ax2.set_ylabel('Height (m)', fontsize=25)
     ax2.grid(True, alpha=0.3)
-    ax2.legend(loc='upper right', fontsize=11)
-    
-    # 下图：原始点数分布
-    ax3 = axes[2]
-    ax3.bar(bin_centers, raw_counts, width=bin_centers[1]-bin_centers[0] if len(bin_centers) > 1 else 0.01,
-            color='skyblue', alpha=0.7, edgecolor='navy', linewidth=0.5)
-    
-    # 标记峰位置
-    if len(peak_positions) > 0:
-        for pos in peak_positions:
-            ax3.axvline(pos, color='red', linestyle='--', linewidth=1.5, alpha=0.5)
-    
-    ax3.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=12)
-    ax3.set_ylabel('Point Count per Bin', fontsize=12)
-    ax3.set_title('Point Distribution Histogram', fontsize=13, fontweight='bold')
-    ax3.grid(True, alpha=0.3, axis='y')
+    ax2.legend(loc='lower right', fontsize=25)
+    ax2.tick_params(axis='both', which='major', labelsize=25)
     
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.close(fig)
+    output_path_2 = f"{base_path}_after_kernel.png"
+    plt.savefig(output_path_2, dpi=300, bbox_inches='tight')
+    plt.close(fig2)
     
     if verbose:
-        print(f"  可视化已保存: {output_path}")
+        print(f"  可视化已保存: {output_path_2}")
 
 
 def height_count_from_row(points, direction, expected_spacing, 

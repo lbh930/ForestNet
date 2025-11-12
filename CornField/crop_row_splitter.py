@@ -212,50 +212,46 @@ def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
     ax1 = axes[0]
     valid_x = ~np.isnan(x_heights)
     ax1.plot(x_centers[valid_x], x_heights[valid_x], 'b-', 
-             linewidth=0.5, alpha=0.3, label='Raw data')
+             linewidth=1, alpha=0.4, label='Raw data')
     
     valid_smooth_x = ~np.isnan(x_smoothed)
     ax1.plot(x_centers[valid_smooth_x], x_smoothed[valid_smooth_x], 'b-', 
-             linewidth=1, alpha=0.8, label='Smoothed')
+             linewidth=2, alpha=0.9, label='Smoothed')
     
     # 只有当X是选中方向时才标记peaks
     if chosen_direction == 'x' and len(x_peaks) > 0:
         ax1.plot(x_centers[x_peaks], x_heights[x_peaks], 'rx', 
-                markersize=8, markeredgewidth=2, label=f'Detected Rows (n={len(x_peaks)})')
+                markersize=8, markeredgewidth=2, label=f'Detected Rows')
     
-    ax1.set_xlabel('X Coordinate (m)', fontsize=12)
-    ax1.set_ylabel('Mean Height (m)', fontsize=12)
-    title = f'X-axis: {len(x_peaks)} rows detected'
-    if chosen_direction == 'x':
-        title += ' [SELECTED]'
-    ax1.set_title(title, fontsize=13, fontweight='bold')
+    ax1.set_xlabel('X Coordinate (m)', fontsize=32)
+    ax1.set_ylabel('Mean Height (m)', fontsize=32)
+    ax1.set_title('X-axis Height Profile', fontsize=32, fontweight='bold')
+    ax1.tick_params(axis='both', which='major', labelsize=18)
     ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='upper right', fontsize=10)
-    
+    ax1.legend(loc='lower right', fontsize=24)
+
     # Y-axis height profile
     ax2 = axes[1]
     valid_y = ~np.isnan(y_heights)
     ax2.plot(y_centers[valid_y], y_heights[valid_y], 'g-', 
-             linewidth=0.5, alpha=0.3, label='Raw data')
+             linewidth=1, alpha=0.4, label='Raw data')
     
     valid_smooth_y = ~np.isnan(y_smoothed)
     ax2.plot(y_centers[valid_smooth_y], y_smoothed[valid_smooth_y], 'g-', 
-             linewidth=1, alpha=0.8, label='Smoothed')
+             linewidth=2, alpha=0.9, label='Smoothed')
     
     # 只有当Y是选中方向时才标记peaks
     if chosen_direction == 'y' and len(y_peaks) > 0:
         ax2.plot(y_centers[y_peaks], y_heights[y_peaks], 'rx', 
-                markersize=8, markeredgewidth=2, label=f'Detected Rows (n={len(y_peaks)})')
+                markersize=16, markeredgewidth=4, label=f'Detected Rows')
     
-    ax2.set_xlabel('Y Coordinate (m)', fontsize=12)
-    ax2.set_ylabel('Mean Height (m)', fontsize=12)
-    title = f'Y-axis: {len(y_peaks)} rows detected'
-    if chosen_direction == 'y':
-        title += ' [SELECTED]'
-    ax2.set_title(title, fontsize=13, fontweight='bold')
+    ax2.set_xlabel('Y Coordinate (m)', fontsize=32)
+    ax2.set_ylabel('Mean Height (m)', fontsize=32)
+    ax2.set_title('Y-axis Height Profile', fontsize=32, fontweight='bold')
+    ax2.tick_params(axis='both', which='major', labelsize=18)
     ax2.grid(True, alpha=0.3)
-    ax2.legend(loc='upper right', fontsize=10)
-    
+    ax2.legend(loc='lower right', fontsize=24)
+
     plt.tight_layout()
     
     output_file = f"{output_prefix}_height_profiles.png"
@@ -281,8 +277,8 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
     fig_height = fig_width * aspect_ratio
     
     # 限制高度范围
-    if fig_height > 20:
-        fig_height = 20
+    if fig_height > 32:
+        fig_height = 32
         fig_width = fig_height / aspect_ratio
     elif fig_height < 8:
         fig_height = 8
@@ -290,10 +286,10 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
     
     # 准备行信息和图例元素
     if chosen_direction == 'x' and len(x_peaks) > 0:
-        direction_label = f'X-axis rows (n={len(x_peaks)}) [SELECTED]'
+        direction_label = f'X-axis rows'
         row_count_str = f'{len(x_peaks)} X-rows'
     elif chosen_direction == 'y' and len(y_peaks) > 0:
-        direction_label = f'Y-axis rows (n={len(y_peaks)}) [SELECTED]'
+        direction_label = f'Y-axis rows'
         row_count_str = f'{len(y_peaks)} Y-rows'
     else:
         direction_label = 'No rows detected'
@@ -307,38 +303,40 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
                    origin='lower', cmap='terrain', aspect='equal', 
                    interpolation='bilinear', alpha=0.9)
     
-    # 只叠加选中方向的行中心线（蓝色）
+    # 只叠加选中方向的行中心线（蓝色，加粗）
     if chosen_direction == 'x' and len(x_peaks) > 0:
         for peak_idx in x_peaks:
             x_pos = x_centers[peak_idx]
-            ax.axvline(x=x_pos, color='blue', linewidth=1.5, alpha=0.8, linestyle='-')
+            ax.axvline(x=x_pos, color='blue', linewidth=2.5, alpha=0.8, linestyle='-')
     elif chosen_direction == 'y' and len(y_peaks) > 0:
         for peak_idx in y_peaks:
             y_pos = y_centers[peak_idx]
-            ax.axhline(y=y_pos, color='blue', linewidth=1.5, alpha=0.8, linestyle='-')
+            ax.axhline(y=y_pos, color='blue', linewidth=2.5, alpha=0.8, linestyle='-')
     
-    ax.set_xlabel('X Coordinate (m)', fontsize=13)
-    ax.set_ylabel('Y Coordinate (m)', fontsize=13)
-    ax.set_title(f'Canopy Height Model with Detected Crop Rows\n{row_count_str}',
-                 fontsize=14, fontweight='bold', pad=15)
+    ax.set_xlabel('X Coordinate (m)', fontsize=32)
+    ax.set_ylabel('Y Coordinate (m)', fontsize=32)
+    ax.tick_params(axis='both', which='major', labelsize=32)
     
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label('Height (m)', fontsize=12)
-    
-    # 图例（不带边界）
+    cbar.set_label('Height (m)', fontsize=32)
+    cbar.ax.tick_params(labelsize=32)
+
+    # 图例（不带边界 - 但图例中显示boundary说明）
     from matplotlib.lines import Line2D
     if chosen_direction in ['x', 'y'] and (len(x_peaks) > 0 or len(y_peaks) > 0):
         legend_elements = [
-            Line2D([0], [0], color='blue', linewidth=2.5, label=direction_label)
+            Line2D([0], [0], color='blue', linewidth=3.5, label=direction_label),
+            Line2D([0], [0], color='red', linewidth=2.5, linestyle='--', 
+                   label='Row boundaries')
         ]
-        ax.legend(handles=legend_elements, loc='upper right', fontsize=11, 
+        ax.legend(handles=legend_elements, loc='upper left', fontsize=32, 
                  framealpha=0.9, edgecolor='black')
     
     ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
     plt.tight_layout()
     
-    output_file_no_boundaries = f"{output_prefix}_chm.png"
+    output_file_no_boundaries = f"{output_prefix}_chm_row_boundary.png"
     plt.savefig(output_file_no_boundaries, dpi=600, bbox_inches='tight')
     plt.close(fig)
     print(f"  CHM已保存（无边界）: {output_file_no_boundaries}")
@@ -351,73 +349,73 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
                    origin='lower', cmap='terrain', aspect='equal', 
                    interpolation='bilinear', alpha=0.9)
     
-    # 叠加行中心线（蓝色）
+    # 叠加行中心线（蓝色，加粗）
     if chosen_direction == 'x' and len(x_peaks) > 0:
         for peak_idx in x_peaks:
             x_pos = x_centers[peak_idx]
-            ax.axvline(x=x_pos, color='blue', linewidth=1.5, alpha=0.8, linestyle='-')
+            ax.axvline(x=x_pos, color='blue', linewidth=2.5, alpha=0.8, linestyle='-')
         
-        # 绘制边界曲线（红色虚线，稍微粗一点）
+        # 绘制边界曲线（红色虚线，加粗）
         if boundaries is not None and len(boundaries) > 0:
             for boundary in boundaries:
                 y_along = boundary['along']
                 x_min_bound = boundary['across_min']
                 x_max_bound = boundary['across_max']
-                ax.plot(x_min_bound, y_along, 'r--', linewidth=1.0, alpha=0.7)
-                ax.plot(x_max_bound, y_along, 'r--', linewidth=1.0, alpha=0.7)
+                ax.plot(x_min_bound, y_along, 'r--', linewidth=2.0, alpha=0.7)
+                ax.plot(x_max_bound, y_along, 'r--', linewidth=2.0, alpha=0.7)
         
     elif chosen_direction == 'y' and len(y_peaks) > 0:
         for peak_idx in y_peaks:
             y_pos = y_centers[peak_idx]
-            ax.axhline(y=y_pos, color='blue', linewidth=1.5, alpha=0.8, linestyle='-')
+            ax.axhline(y=y_pos, color='blue', linewidth=2.5, alpha=0.8, linestyle='-')
         
-        # 绘制边界曲线（红色虚线，稍微粗一点）
+        # 绘制边界曲线（红色虚线，加粗）
         if boundaries is not None and len(boundaries) > 0:
             for boundary in boundaries:
                 x_along = boundary['along']
                 y_min_bound = boundary['across_min']
                 y_max_bound = boundary['across_max']
-                ax.plot(x_along, y_min_bound, 'r--', linewidth=1.0, alpha=0.7)
-                ax.plot(x_along, y_max_bound, 'r--', linewidth=1.0, alpha=0.7)
+                ax.plot(x_along, y_min_bound, 'r--', linewidth=2.0, alpha=0.7)
+                ax.plot(x_along, y_max_bound, 'r--', linewidth=2.0, alpha=0.7)
     
-    ax.set_xlabel('X Coordinate (m)', fontsize=13)
-    ax.set_ylabel('Y Coordinate (m)', fontsize=13)
-    ax.set_title(f'Canopy Height Model with Crop Rows and Boundaries\n{row_count_str}',
-                 fontsize=14, fontweight='bold', pad=15)
+    ax.set_xlabel('X Coordinate (m)', fontsize=32)
+    ax.set_ylabel('Y Coordinate (m)', fontsize=32)
+    ax.tick_params(axis='both', which='major', labelsize=32)
     
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label('Height (m)', fontsize=12)
-    
+    cbar.set_label('Height (m)', fontsize=32)
+    cbar.ax.tick_params(labelsize=32)
+
     # 图例（带边界）
     legend_elements = []
     if chosen_direction == 'x' and len(x_peaks) > 0:
         legend_elements.append(
-            Line2D([0], [0], color='blue', linewidth=2.5, label=direction_label)
+            Line2D([0], [0], color='blue', linewidth=3.5, label=direction_label)
         )
         if boundaries is not None and len(boundaries) > 0:
             legend_elements.append(
-                Line2D([0], [0], color='red', linewidth=1.0, linestyle='--', 
-                       label=f'Row boundaries (n={len(boundaries)+1})')
+                Line2D([0], [0], color='red', linewidth=2.5, linestyle='--', 
+                       label=f'Row boundaries')
             )
     elif chosen_direction == 'y' and len(y_peaks) > 0:
         legend_elements.append(
-            Line2D([0], [0], color='blue', linewidth=2.5, label=direction_label)
+            Line2D([0], [0], color='blue', linewidth=3.5, label=direction_label)
         )
         if boundaries is not None and len(boundaries) > 0:
             legend_elements.append(
-                Line2D([0], [0], color='red', linewidth=1.0, linestyle='--', 
-                       label=f'Row boundaries (n={len(boundaries)+1})')
+                Line2D([0], [0], color='red', linewidth=2.5, linestyle='--', 
+                       label=f'Row boundaries')
             )
     
     if legend_elements:
-        ax.legend(handles=legend_elements, loc='upper right', fontsize=11, 
+        ax.legend(handles=legend_elements, loc='upper left', fontsize=32, 
                  framealpha=0.9, edgecolor='black')
     
     ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
     plt.tight_layout()
     
-    output_file_with_boundaries = f"{output_prefix}_chm_with_boundaries.png"
+    output_file_with_boundaries = f"{output_prefix}_chm_row_boundary_with_boundaries.png"
     plt.savefig(output_file_with_boundaries, dpi=600, bbox_inches='tight')
     plt.close(fig)
     print(f"  CHM已保存（带边界）: {output_file_with_boundaries}")
@@ -502,26 +500,25 @@ def calculate_row_boundaries_curves(row_positions, chm_smoothed, x_min, y_min, n
     
     along_samples = np.arange(along_min, along_max + granularity, granularity)
     
-    # 为每对相邻rows计算分割曲线
-    split_curves = []  # 存储每个间隙的分割曲线
-    
-    for i in range(n_rows - 1):
-        pos1 = row_positions[i]
-        pos2 = row_positions[i + 1]
+    # 辅助函数：计算两个位置之间的分割曲线
+    def compute_split_curve(pos1, pos2, is_boundary_edge=False):
+        """
+        计算两个位置之间的分割曲线
         
+        参数:
+            pos1: 起始位置（对于边界情况可能是tile边界）
+            pos2: 结束位置（对于边界情况可能是tile边界）
+            is_boundary_edge: 是否是tile边界
+        """
         split_positions = []
         valid_along = []
         
-        # 对于沿着row方向的每个采样点
         for along_pos in along_samples:
-            # 确定沿着方向的像素索引范围
             if row_direction == 'x':
-                # X方向的row，沿Y延伸
                 y_idx_center = int((along_pos - y_min) / resolution)
                 if y_idx_center < 0 or y_idx_center >= ny:
                     continue
                 
-                # 在X方向（垂直于row）上找最低点
                 x_start_idx = int((pos1 - x_min) / resolution)
                 x_end_idx = int((pos2 - x_min) / resolution)
                 x_start_idx = max(0, x_start_idx)
@@ -530,16 +527,13 @@ def calculate_row_boundaries_curves(row_positions, chm_smoothed, x_min, y_min, n
                 if x_end_idx <= x_start_idx:
                     continue
                 
-                # 从平滑CHM中提取这一行
                 chm_slice = chm_smoothed[y_idx_center, x_start_idx:x_end_idx]
                 
             else:
-                # Y方向的row，沿X延伸
                 x_idx_center = int((along_pos - x_min) / resolution)
                 if x_idx_center < 0 or x_idx_center >= nx:
                     continue
                 
-                # 在Y方向（垂直于row）上找最低点
                 y_start_idx = int((pos1 - y_min) / resolution)
                 y_end_idx = int((pos2 - y_min) / resolution)
                 y_start_idx = max(0, y_start_idx)
@@ -548,16 +542,13 @@ def calculate_row_boundaries_curves(row_positions, chm_smoothed, x_min, y_min, n
                 if y_end_idx <= y_start_idx:
                     continue
                 
-                # 从平滑CHM中提取这一列
                 chm_slice = chm_smoothed[y_start_idx:y_end_idx, x_idx_center]
             
-            # 在平滑CHM切片中找最低点
             valid_mask = ~np.isnan(chm_slice)
             if np.sum(valid_mask) > 3:
                 valid_heights = chm_slice[valid_mask]
                 min_height_idx = np.argmin(valid_heights)
                 
-                # 转换回坐标
                 valid_indices = np.where(valid_mask)[0]
                 min_idx_in_slice = valid_indices[min_height_idx]
                 
@@ -570,60 +561,104 @@ def calculate_row_boundaries_curves(row_positions, chm_smoothed, x_min, y_min, n
                 valid_along.append(along_pos)
         
         if len(split_positions) > 0:
-            split_curves.append({
+            return {
                 'along': np.array(valid_along),
                 'split': np.array(split_positions)
-            })
+            }
         else:
             # 回退到直线
-            split_curves.append({
+            return {
                 'along': np.array([along_min, along_max]),
                 'split': np.array([(pos1 + pos2) / 2, (pos1 + pos2) / 2])
-            })
+            }
+    
+    # 计算所有分割曲线（包括tile边界到第一个row，以及最后一个row到tile边界）
+    split_curves = []
+    
+    # 获取tile边界
+    if row_direction == 'x':
+        across_tile_min = x_min
+        across_tile_max = x_min + nx * resolution
+    else:
+        across_tile_min = y_min
+        across_tile_max = y_min + ny * resolution
+    
+    # 第一个row之前的边界（从tile边界到第一个row）
+    if n_rows > 0:
+        split_curves.append(compute_split_curve(across_tile_min, row_positions[0]))
+    
+    # 相邻rows之间的分割
+    for i in range(n_rows - 1):
+        split_curves.append(compute_split_curve(row_positions[i], row_positions[i + 1]))
+    
+    # 最后一个row之后的边界（从最后一个row到tile边界）
+    if n_rows > 0:
+        split_curves.append(compute_split_curve(row_positions[-1], across_tile_max))
     
     # 为每个row构建边界
     boundary_curves = []
     for i in range(n_rows):
         if n_rows == 1:
-            # 只有一个row，固定宽度
-            boundary_curves.append({
-                'along': np.array([along_min, along_max]),
-                'across_min': np.array([row_positions[0] - 0.2, row_positions[0] - 0.2]),
-                'across_max': np.array([row_positions[0] + 0.2, row_positions[0] + 0.2])
-            })
-        elif i == 0:
-            # 第一个row
-            right_curve = split_curves[0]
-            along_pts = right_curve['along']
-            across_max = right_curve['split']
-            across_min = 2 * row_positions[0] - across_max  # 对称
-            boundary_curves.append({
-                'along': along_pts,
-                'across_min': across_min,
-                'across_max': across_max
-            })
-        elif i == n_rows - 1:
-            # 最后一个row
-            left_curve = split_curves[-1]
-            along_pts = left_curve['along']
-            across_min = left_curve['split']
-            across_max = 2 * row_positions[-1] - across_min  # 对称
-            boundary_curves.append({
-                'along': along_pts,
-                'across_min': across_min,
-                'across_max': across_max
-            })
-        else:
-            # 中间的row
-            left_curve = split_curves[i - 1]
-            right_curve = split_curves[i]
+            # 只有一个row，使用tile边界到row的分割
+            left_curve = split_curves[0]  # tile_min到row
+            right_curve = split_curves[1]  # row到tile_max
             
             # 使用交集的along坐标
             along_pts = np.intersect1d(left_curve['along'], right_curve['along'])
             if len(along_pts) == 0:
                 along_pts = left_curve['along']
             
-            # 插值获取对应的边界值
+            across_min = np.interp(along_pts, left_curve['along'], left_curve['split'])
+            across_max = np.interp(along_pts, right_curve['along'], right_curve['split'])
+            
+            boundary_curves.append({
+                'along': along_pts,
+                'across_min': across_min,
+                'across_max': across_max
+            })
+        elif i == 0:
+            # 第一个row：左边界是tile边界，右边界是到下一个row的分割
+            left_curve = split_curves[0]  # tile_min到第一个row
+            right_curve = split_curves[1]  # 第一个row到第二个row
+            
+            along_pts = np.intersect1d(left_curve['along'], right_curve['along'])
+            if len(along_pts) == 0:
+                along_pts = left_curve['along']
+            
+            across_min = np.interp(along_pts, left_curve['along'], left_curve['split'])
+            across_max = np.interp(along_pts, right_curve['along'], right_curve['split'])
+            
+            boundary_curves.append({
+                'along': along_pts,
+                'across_min': across_min,
+                'across_max': across_max
+            })
+        elif i == n_rows - 1:
+            # 最后一个row：左边界是从上一个row的分割，右边界是到tile边界
+            left_curve = split_curves[i]  # 上一个row到最后一个row
+            right_curve = split_curves[i + 1]  # 最后一个row到tile_max
+            
+            along_pts = np.intersect1d(left_curve['along'], right_curve['along'])
+            if len(along_pts) == 0:
+                along_pts = left_curve['along']
+            
+            across_min = np.interp(along_pts, left_curve['along'], left_curve['split'])
+            across_max = np.interp(along_pts, right_curve['along'], right_curve['split'])
+            
+            boundary_curves.append({
+                'along': along_pts,
+                'across_min': across_min,
+                'across_max': across_max
+            })
+        else:
+            # 中间的row：使用两侧的分割曲线
+            left_curve = split_curves[i]  # 从上一个row到当前row
+            right_curve = split_curves[i + 1]  # 从当前row到下一个row
+            
+            along_pts = np.intersect1d(left_curve['along'], right_curve['along'])
+            if len(along_pts) == 0:
+                along_pts = left_curve['along']
+            
             across_min = np.interp(along_pts, left_curve['along'], left_curve['split'])
             across_max = np.interp(along_pts, right_curve['along'], right_curve['split'])
             

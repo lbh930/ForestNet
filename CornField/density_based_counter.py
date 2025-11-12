@@ -166,44 +166,26 @@ def visualize_density_profile(bin_centers, density, smoothed_density,
         output_path: 输出文件路径
         direction: 方向轴
     """
-    fig, axes = plt.subplots(2, 1, figsize=(14, 10))
+    fig, ax1 = plt.subplots(1, 1, figsize=(14, 6))
     
-    # 上图：密度曲线
-    ax1 = axes[0]
-    ax1.plot(bin_centers, density, 'b-', linewidth=0.8, alpha=0.4, label='Raw Density')
-    ax1.plot(bin_centers, smoothed_density, 'b-', linewidth=2, label='Smoothed Density')
+    # 只显示平滑后的密度曲线
+    ax1.plot(bin_centers, smoothed_density, 'b-', linewidth=3, label='Point Density')
     
     # 标记峰位置
     if len(peak_positions) > 0:
         ax1.plot(peak_positions, peak_densities, 'rx', 
-                markersize=12, markeredgewidth=2.5, 
+                markersize=18, markeredgewidth=3.75, 
                 label=f'Detected Plants (n={len(peak_positions)})')
         
         # 添加垂直虚线
         for pos in peak_positions:
-            ax1.axvline(pos, color='red', linestyle='--', linewidth=1, alpha=0.3)
+            ax1.axvline(pos, color='red', linestyle='--', linewidth=1.5, alpha=0.3)
     
-    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=12)
-    ax1.set_ylabel('Density (weighted by height)', fontsize=12)
-    ax1.set_title(f'Plant Detection from Density Profile along {direction.upper()}-axis', 
-                  fontsize=13, fontweight='bold')
+    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=25)
+    ax1.set_ylabel('Density (weighted by height)', fontsize=25)
     ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='upper right', fontsize=11)
-    
-    # 下图：原始点数分布
-    ax2 = axes[1]
-    ax2.bar(bin_centers, raw_counts, width=bin_centers[1]-bin_centers[0] if len(bin_centers) > 1 else 0.01,
-            color='skyblue', alpha=0.7, edgecolor='navy', linewidth=0.5)
-    
-    # 标记峰位置
-    if len(peak_positions) > 0:
-        for pos in peak_positions:
-            ax2.axvline(pos, color='red', linestyle='--', linewidth=1.5, alpha=0.5)
-    
-    ax2.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=12)
-    ax2.set_ylabel('Point Count per Bin', fontsize=12)
-    ax2.set_title('Point Distribution Histogram', fontsize=13, fontweight='bold')
-    ax2.grid(True, alpha=0.3, axis='y')
+    ax1.legend(loc='lower right', fontsize=25)
+    ax1.tick_params(axis='both', which='major', labelsize=25)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
