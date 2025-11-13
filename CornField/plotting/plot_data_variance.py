@@ -23,12 +23,12 @@ leaf_count = [12.667, 10.333, None, 56.33, 16.67]
 # consistent color palette
 colors = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F"]
 
-font_size = 22
+font_size = 28
 
 # =========================
 # 图1：Density vs Height
 # =========================
-fig, ax = plt.subplots(figsize=(8, 8))
+fig, ax = plt.subplots(figsize=(10, 6))  # shorter y-axis to reduce vertical space
 
 # 手动设置文字偏移，避免重叠
 text_offsets = [
@@ -40,11 +40,11 @@ text_offsets = [
 ]
 
 for i in range(len(fields)):
-    ax.scatter(density[i], height[i], color=colors[i], s=180)
+    ax.scatter(density[i], height[i], color=colors[i], s=450)  # much larger dots
     ax.text(density[i] + text_offsets[i][0], height[i] + text_offsets[i][1], 
             fields[i], fontsize=font_size - 4, va='center')
 
-ax.set_box_aspect(1)  # 强制正方形
+# remove square aspect to keep y-axis physically shorter
 
 # 计算边距
 x_margin = (max(density) - min(density)) * 0.3
@@ -72,7 +72,7 @@ for i in range(len(fields)):
         leaf_density.append(density[i] * leaf_count[i])
         field_valid.append(fields[i])
 
-fig, ax = plt.subplots(figsize=(8, 8))
+fig, ax = plt.subplots(figsize=(10, 6))  # shorter y-axis to reduce vertical space
 
 # 手动设置文字偏移，避免重叠
 text_offsets_leaf = [
@@ -83,11 +83,11 @@ text_offsets_leaf = [
 ]
 
 for i in range(len(field_valid)):
-    ax.scatter(leaf_area[i], leaf_density[i], color=colors[i], s=180)
+    ax.scatter(leaf_area[i], leaf_density[i], color=colors[i], s=450)  # much larger dots
     ax.text(leaf_area[i] + text_offsets_leaf[i][0], leaf_density[i] + text_offsets_leaf[i][1], 
             field_valid[i], fontsize=font_size - 4, va='center')
 
-ax.set_box_aspect(1)  # 强制正方形
+# remove square aspect to keep y-axis physically shorter
 
 # 计算边距
 x_margin = (max(leaf_area) - min(leaf_area)) * 0.5
@@ -99,7 +99,7 @@ ax.set_xlabel("Single Leaf Area (cm²)", fontsize=font_size)
 ax.set_ylabel("Leaf Density (leaves/m²)", fontsize=font_size)
 ax.tick_params(axis='both', labelsize=font_size)
 plt.tight_layout()
-plt.savefig("scatter_leafarea_density.png", dpi=300)
+plt.savefig("placeholder_density_barplot.png", dpi=300)
 plt.close()
 
 # =========================
@@ -112,7 +112,7 @@ for i in range(len(fields)):
         field_lai.append(fields[i])
         lai_valid.append(lai[i])
 
-plt.figure(figsize=(14, 6))
+plt.figure(figsize=(12, 4.8))
 bars = plt.bar(field_lai, lai_valid, color=colors[:len(field_lai)])
 plt.xticks(rotation=30, ha='right', fontsize=font_size - 2)
 plt.ylabel("LAI (m²/m²)", fontsize=font_size)

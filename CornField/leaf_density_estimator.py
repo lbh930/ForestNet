@@ -10,6 +10,7 @@ import sys
 import numpy as np
 import laspy
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 from pathlib import Path
 import time
 import yaml
@@ -166,21 +167,66 @@ def plot_vertical_profiles(occupancy, p_gap, lad, grid_info, output_dir):
     vz, z_min, nz = grid_info['vz'], grid_info['z_min'], grid_info['nz']
     z_actual = z_min + (np.arange(nz) + 0.5) * vz
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    axes[0].plot(occupancy, z_actual, 'b-', linewidth=2)
-    axes[0].fill_betweenx(z_actual, 0, occupancy, color='blue', alpha=0.3)
-    axes[0].set_title('Occupancy Rate by Height'); axes[0].set_xlabel('Occupancy'); axes[0].set_ylabel('Height (m)')
-    axes[1].plot(p_gap, z_actual, 'g-', linewidth=2)
-    axes[1].fill_betweenx(z_actual, 0, p_gap, color='green', alpha=0.3)
-    axes[1].set_title('Gap Probability'); axes[1].set_xlabel('P_gap'); axes[1].set_ylabel('Height (m)')
-    axes[2].plot(lad, z_actual, 'r-', linewidth=2)
-    axes[2].fill_betweenx(z_actual, 0, lad, color='red', alpha=0.3)
-    axes[2].set_title('Leaf Area Density'); axes[2].set_xlabel('LAD (m²/m³)'); axes[2].set_ylabel('Height (m)')
+    # 全局字体
+    plt.rcParams.update({'font.size': 32})
+
+    # 1) Occupancy 图
+    fig1, ax1 = plt.subplots(figsize=(12, 12))  # 方形画布
+    ax1.plot(occupancy, z_actual, 'b-', linewidth=3)
+    ax1.fill_betweenx(z_actual, 0, occupancy, color='blue', alpha=0.3)
+    ax1.set_xlabel('Occupancy', fontsize=32)
+    ax1.set_ylabel('Height (m)', fontsize=32)
+    ax1.tick_params(axis='both', labelsize=32)
+    # 减少X轴刻度密度并格式化为两位小数
+    try:
+        ax1.xaxis.set_major_locator(mticker.MaxNLocator(nbins=5))
+        ax1.xaxis.set_major_formatter(mticker.FormatStrFormatter('%.2f'))
+    except Exception:
+        pass
+    # 使坐标框架尽量正方（若Matplotlib版本支持）
+    try:
+        ax1.set_box_aspect(1)
+    except Exception:
+        pass
     plt.tight_layout()
-    out_path = output_dir / "vertical_profiles.png"
-    plt.savefig(out_path, dpi=300, bbox_inches='tight')
-    plt.close(fig)
-    print(f"  已保存: {out_path.name}")
+    out1 = output_dir / "vertical_occupancy.png"
+    fig1.savefig(out1, dpi=300, bbox_inches='tight')
+    plt.close(fig1)
+    print(f"  已保存: {out1.name}")
+
+    # 2) P_gap 图
+    fig2, ax2 = plt.subplots(figsize=(12, 12))  # 方形画布
+    ax2.plot(p_gap, z_actual, 'g-', linewidth=3)
+    ax2.fill_betweenx(z_actual, 0, p_gap, color='green', alpha=0.3)
+    ax2.set_xlabel('P_gap', fontsize=32)
+    ax2.set_ylabel('Height (m)', fontsize=32)
+    ax2.tick_params(axis='both', labelsize=32)
+    try:
+        ax2.set_box_aspect(1)
+    except Exception:
+        pass
+    plt.tight_layout()
+    out2 = output_dir / "vertical_pgap.png"
+    fig2.savefig(out2, dpi=300, bbox_inches='tight')
+    plt.close(fig2)
+    print(f"  已保存: {out2.name}")
+
+    # 3) LAD 图
+    fig3, ax3 = plt.subplots(figsize=(12, 12))  # 方形画布
+    ax3.plot(lad, z_actual, 'r-', linewidth=3)
+    ax3.fill_betweenx(z_actual, 0, lad, color='red', alpha=0.3)
+    ax3.set_xlabel('LAD (m²/m³)', fontsize=32)
+    ax3.set_ylabel('Height (m)', fontsize=32)
+    ax3.tick_params(axis='both', labelsize=32)
+    try:
+        ax3.set_box_aspect(1)
+    except Exception:
+        pass
+    plt.tight_layout()
+    out3 = output_dir / "vertical_lad.png"
+    fig3.savefig(out3, dpi=300, bbox_inches='tight')
+    plt.close(fig3)
+    print(f"  已保存: {out3.name}")
 
 
 def save_summary_yaml(output_path, info):
@@ -205,14 +251,22 @@ def save_summary_yaml(output_path, info):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("用法: python leaf_density_estimator.py <las文件或文件夹路径>")
+    if len(sys.argv) < 2 or ('-h' in sys.argv) or ('--help' in sys.argv):
+        print("用法: python leaf_density_estimator.py <las文件或文件夹路径> [选项]")
+        print("选项:")
+        print("  --vx <float>          体素尺寸X (默认 0.005 m)")
+        print("  --vy <float>          体素尺寸Y (默认 0.005 m)")
+        print("  --vz <float>          体素尺寸Z (默认 0.005 m)")
+        print("  --G <float>           投影函数G (默认 0.5)")
+        print("  --ground <percent>    自适应地面移除百分比 (默认 15)")
+        print("  --visualize_voxel     使用Open3D渲染体素化可视化")
         sys.exit(1)
 
     input_path = Path(sys.argv[1])
     vx = vy = vz = 0.005
     G = 0.5
     ground_percentile = 15.0
+    visualize_voxel = ('--visualize_voxel' in sys.argv)
 
     if '--vx' in sys.argv:
         vx = float(sys.argv[sys.argv.index('--vx') + 1])
@@ -285,6 +339,107 @@ def main():
         occupancy, p_gap = compute_gap_probability(voxel_grid)
         lad = compute_lad_beer_lambert(p_gap, vz, G)
         lai_total = np.sum(lad) * vz
+
+        # 可选：Open3D 体素可视化
+        if visualize_voxel:
+            try:
+                import open3d as o3d
+                print("\n使用 Open3D 渲染体素可视化窗口 (关闭窗口以继续)…")
+                # 将几何居中到原点，避免UTM等大坐标导致初始视角很远
+                cx = 0.5 * (x_clean.min() + x_clean.max())
+                cy = 0.5 * (y_clean.min() + y_clean.max())
+                cz = 0.5 * (z_clean.min() + z_clean.max())
+                x_vis = x_clean - cx
+                y_vis = y_clean - cy
+                z_vis = z_clean - cz
+
+                # 构建点云
+                pcd = o3d.geometry.PointCloud()
+                pts = np.vstack([x_vis, y_vis, z_vis]).T.astype(np.float64)
+                pcd.points = o3d.utility.Vector3dVector(pts)
+
+                # 可选着色：按相对高度着色，提升可读性
+                z_norm = (z_vis - z_vis.min()) / max(1e-9, (z_vis.max() - z_vis.min()))
+                colors = np.stack([0.2 + 0.8 * z_norm, 0.6 * (1 - z_norm), 1.0 - 0.5 * z_norm], axis=1)
+                pcd.colors = o3d.utility.Vector3dVector(colors.astype(np.float64))
+
+                # 基于点云生成体素网格（统一体素大小使用 vx）
+                voxel_size = float(vx)
+                vgrid = o3d.geometry.VoxelGrid.create_from_point_cloud(pcd, voxel_size=voxel_size)
+
+                # 将体素网格转为三角网格（采样一部分体素以保障性能），以获得真实的明暗着色
+                vox_list = vgrid.get_voxels()
+                n_vox = len(vox_list)
+                max_vox_mesh = 150000  # 控制最大转网格体素数量，避免卡顿
+                if n_vox == 0:
+                    print("  [可视化] 体素为空，跳过渲染。")
+                    continue
+                if n_vox > max_vox_mesh:
+                    sel_idx = np.random.choice(n_vox, max_vox_mesh, replace=False)
+                    sel_voxels = [vox_list[i] for i in sel_idx]
+                    print(f"  [可视化] 体素数 {n_vox:,}，随机采样 {max_vox_mesh:,} 个用于着色渲染…")
+                else:
+                    sel_voxels = vox_list
+                    print(f"  [可视化] 体素数 {n_vox:,}，全部用于着色渲染…")
+
+                mesh_vox = o3d.geometry.TriangleMesh()
+                half = voxel_size * 0.5
+                base_box = o3d.geometry.TriangleMesh.create_box(width=voxel_size, height=voxel_size, depth=voxel_size)
+                base_box.compute_vertex_normals()
+
+                # 根据体素中心复制 box 并平移
+                z_min_c = z_vis.min(); z_max_c = z_vis.max(); z_rng = max(1e-9, (z_max_c - z_min_c))
+                for v in sel_voxels:
+                    center = vgrid.get_voxel_center_coordinate(v.grid_index)
+                    box_i = o3d.geometry.TriangleMesh(base_box)
+                    box_i.translate(center - np.array([half, half, half]))
+                    # 按高度着色（有光照的材质基色）
+                    zn = (center[2] - z_min_c) / z_rng
+                    color = np.array([0.2 + 0.8 * zn, 0.6 * (1 - zn), 1.0 - 0.5 * zn])
+                    box_i.paint_uniform_color(color)
+                    mesh_vox += box_i
+
+                mesh_vox.compute_vertex_normals()
+
+                # 坐标系
+                axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=max(voxel_size * 5, 0.1))
+
+                # 使用自定义可视化器以设置初始相机：看向原点并放大到合理比例
+                vis = o3d.visualization.Visualizer()
+                vis.create_window(window_name=f"Voxelized View: {las_file.name}", width=1280, height=800)
+                vis.add_geometry(mesh_vox)
+                vis.add_geometry(axis)
+                vis.update_renderer()
+
+                # 相机控制：lookat到体素中心（接近原点），适度缩放
+                vc = vis.get_view_control()
+                try:
+                    center = mesh_vox.get_axis_aligned_bounding_box().get_center()
+                except Exception:
+                    center = np.array([0.0, 0.0, 0.0])
+                # 设置视角参数：保持默认front/up，只调整lookat与zoom，避免空白/过远
+                vc.set_lookat(center.tolist())
+                vc.set_zoom(0.7)
+
+                # 渲染选项：开启光照，确保体素为明暗着色（shaded）
+                ro = vis.get_render_option()
+                try:
+                    ro.light_on = True
+                except Exception:
+                    pass
+                # 适度的背景颜色可增强对比
+                try:
+                    ro.background_color = np.array([1.0, 1.0, 1.0])
+                except Exception:
+                    pass
+
+                # 进入交互
+                vis.run()
+                vis.destroy_window()
+            except ImportError:
+                print("警告: 未安装 open3d，跳过体素可视化。请在conda环境中安装 open3d 后重试。")
+            except Exception as e:
+                print(f"警告: Open3D 可视化失败，已跳过。错误: {e}")
         
         # 调试输出
         print(f"\n[调试] LAI 计算:")
