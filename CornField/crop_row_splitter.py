@@ -206,7 +206,7 @@ def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
     # 设置子图宽度比例，使其与数据范围成正比
     width_ratios = [x_range, y_range]
     
-    fig, axes = plt.subplots(1, 2, figsize=(18, 6), gridspec_kw={'width_ratios': width_ratios})
+    fig, axes = plt.subplots(1, 2, figsize=(18, 4.5), gridspec_kw={'width_ratios': width_ratios})
     
     # X-axis height profile
     ax1 = axes[0]
@@ -224,9 +224,8 @@ def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
                 markersize=8, markeredgewidth=2, label=f'Detected Rows')
     
     ax1.set_xlabel('X Coordinate (m)', fontsize=32)
-    ax1.set_ylabel('Mean Height (m)', fontsize=32)
-    ax1.set_title('X-axis Height Profile', fontsize=32, fontweight='bold')
-    ax1.tick_params(axis='both', which='major', labelsize=18)
+    ax1.set_ylabel('Mean Height (m)', fontsize=30)
+    ax1.tick_params(axis='both', which='major', labelsize=28)
     ax1.grid(True, alpha=0.3)
     ax1.legend(loc='lower right', fontsize=24)
 
@@ -246,9 +245,8 @@ def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
                 markersize=16, markeredgewidth=4, label=f'Detected Rows')
     
     ax2.set_xlabel('Y Coordinate (m)', fontsize=32)
-    ax2.set_ylabel('Mean Height (m)', fontsize=32)
-    ax2.set_title('Y-axis Height Profile', fontsize=32, fontweight='bold')
-    ax2.tick_params(axis='both', which='major', labelsize=18)
+    ax2.set_ylabel('Mean Height (m)', fontsize=30)
+    ax2.tick_params(axis='both', which='major', labelsize=28)
     ax2.grid(True, alpha=0.3)
     ax2.legend(loc='lower right', fontsize=24)
 
@@ -266,24 +264,7 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
     """生成CHM可视化（使用预计算的平滑CHM）- 生成两张图：带分割线和不带分割线"""
     print("  生成CHM可视化...")
     t0 = time.time()
-    
-    # 计算实际宽高比
-    x_range = x_max - x_min
-    y_range = y_max - y_min
-    aspect_ratio = y_range / x_range
-    
-    # 根据比例调整figure大小（基准宽度16英寸）
-    fig_width = 16
-    fig_height = fig_width * aspect_ratio
-    
-    # 限制高度范围
-    if fig_height > 32:
-        fig_height = 32
-        fig_width = fig_height / aspect_ratio
-    elif fig_height < 8:
-        fig_height = 8
-        fig_width = fig_height / aspect_ratio
-    
+
     # 准备行信息和图例元素
     if chosen_direction == 'x' and len(x_peaks) > 0:
         direction_label = f'X-axis rows'
@@ -294,13 +275,16 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
     else:
         direction_label = 'No rows detected'
         row_count_str = '0 rows'
+
+    fig_width = 16
+    fig_height = 8
     
     # ============= 第一张图：不带分割线 =============
     fig, ax = plt.subplots(1, 1, figsize=(fig_width, fig_height))
     
     # 显示CHM
     im = ax.imshow(chm_smoothed, extent=[x_min, x_max, y_min, y_max], 
-                   origin='lower', cmap='terrain', aspect='equal', 
+                   origin='lower', cmap='terrain', aspect='auto', 
                    interpolation='bilinear', alpha=0.9)
     
     # 只叠加选中方向的行中心线（蓝色，加粗）
@@ -313,14 +297,14 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
             y_pos = y_centers[peak_idx]
             ax.axhline(y=y_pos, color='blue', linewidth=2.5, alpha=0.8, linestyle='-')
     
-    ax.set_xlabel('X Coordinate (m)', fontsize=32)
-    ax.set_ylabel('Y Coordinate (m)', fontsize=32)
-    ax.tick_params(axis='both', which='major', labelsize=32)
+    ax.set_xlabel('X Coordinate (m)', fontsize=36)
+    ax.set_ylabel('Y Coordinate (m)', fontsize=36)
+    ax.tick_params(axis='both', which='major', labelsize=36)
     
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label('Height (m)', fontsize=32)
-    cbar.ax.tick_params(labelsize=32)
+    cbar.set_label('Height (m)', fontsize=36)
+    cbar.ax.tick_params(labelsize=36)
 
     # 图例（不带边界 - 但图例中显示boundary说明）
     from matplotlib.lines import Line2D
@@ -330,8 +314,8 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
             Line2D([0], [0], color='red', linewidth=2.5, linestyle='--', 
                    label='Row boundaries')
         ]
-        ax.legend(handles=legend_elements, loc='upper left', fontsize=32, 
-                 framealpha=0.9, edgecolor='black')
+        ax.legend(handles=legend_elements, loc='upper left', fontsize=36, 
+                  framealpha=0.9, edgecolor='black')
     
     ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
     plt.tight_layout()
@@ -346,7 +330,7 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
     
     # 显示CHM
     im = ax.imshow(chm_smoothed, extent=[x_min, x_max, y_min, y_max], 
-                   origin='lower', cmap='terrain', aspect='equal', 
+                   origin='lower', cmap='terrain', aspect='auto', 
                    interpolation='bilinear', alpha=0.9)
     
     # 叠加行中心线（蓝色，加粗）
@@ -378,14 +362,14 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
                 ax.plot(x_along, y_min_bound, 'r--', linewidth=2.0, alpha=0.7)
                 ax.plot(x_along, y_max_bound, 'r--', linewidth=2.0, alpha=0.7)
     
-    ax.set_xlabel('X Coordinate (m)', fontsize=32)
-    ax.set_ylabel('Y Coordinate (m)', fontsize=32)
-    ax.tick_params(axis='both', which='major', labelsize=32)
+    ax.set_xlabel('X Coordinate (m)', fontsize=36)
+    ax.set_ylabel('Y Coordinate (m)', fontsize=36)
+    ax.tick_params(axis='both', which='major', labelsize=36)
     
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label('Height (m)', fontsize=32)
-    cbar.ax.tick_params(labelsize=32)
+    cbar.set_label('Height (m)', fontsize=36)
+    cbar.ax.tick_params(labelsize=36)
 
     # 图例（带边界）
     legend_elements = []
@@ -409,8 +393,8 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
             )
     
     if legend_elements:
-        ax.legend(handles=legend_elements, loc='upper left', fontsize=32, 
-                 framealpha=0.9, edgecolor='black')
+        ax.legend(handles=legend_elements, loc='upper left', fontsize=36, 
+                  framealpha=0.9, edgecolor='black')
     
     ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
     plt.tight_layout()

@@ -176,7 +176,7 @@ def plot_vertical_profiles(occupancy, p_gap, lad, grid_info, output_dir):
     ax1.fill_betweenx(z_actual, 0, occupancy, color='blue', alpha=0.3)
     ax1.set_xlabel('Occupancy', fontsize=32)
     ax1.set_ylabel('Height (m)', fontsize=32)
-    ax1.tick_params(axis='both', labelsize=32)
+    ax1.tick_params(axis='both', labelsize=28)
     # 减少X轴刻度密度并格式化为两位小数
     try:
         ax1.xaxis.set_major_locator(mticker.MaxNLocator(nbins=5))
@@ -200,7 +200,7 @@ def plot_vertical_profiles(occupancy, p_gap, lad, grid_info, output_dir):
     ax2.fill_betweenx(z_actual, 0, p_gap, color='green', alpha=0.3)
     ax2.set_xlabel('P_gap', fontsize=32)
     ax2.set_ylabel('Height (m)', fontsize=32)
-    ax2.tick_params(axis='both', labelsize=32)
+    ax2.tick_params(axis='both', labelsize=28)
     try:
         ax2.set_box_aspect(1)
     except Exception:
@@ -217,7 +217,7 @@ def plot_vertical_profiles(occupancy, p_gap, lad, grid_info, output_dir):
     ax3.fill_betweenx(z_actual, 0, lad, color='red', alpha=0.3)
     ax3.set_xlabel('LAD (m²/m³)', fontsize=32)
     ax3.set_ylabel('Height (m)', fontsize=32)
-    ax3.tick_params(axis='both', labelsize=32)
+    ax3.tick_params(axis='both', labelsize=28)
     try:
         ax3.set_box_aspect(1)
     except Exception:

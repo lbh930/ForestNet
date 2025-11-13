@@ -286,7 +286,7 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
     base_path = output_path.parent / output_path.stem
     
     # 图1：kernel处理前 - 高度曲线对比
-    fig1, ax1 = plt.subplots(1, 1, figsize=(14, 6))
+    fig1, ax1 = plt.subplots(1, 1, figsize=(14, 4))
     
     ax1.plot(bin_centers, max_heights, 'r-', linewidth=1, alpha=0.3, label='Max Height')
     ax1.plot(bin_centers, percentile_95_heights, 'orange', linewidth=1, alpha=0.5, label='95th Percentile Height')
@@ -304,11 +304,11 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
         for pos in peak_positions:
             ax1.axvline(pos, color='red', linestyle='--', linewidth=1, alpha=0.3)
     
-    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=25)
-    ax1.set_ylabel('Height (m)', fontsize=25)
+    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=32)
+    ax1.set_ylabel('Height (m)', fontsize=28)
     ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='upper right', fontsize=25)
-    ax1.tick_params(axis='both', which='major', labelsize=25)
+    ax1.legend(loc='lower right', fontsize=25)
+    ax1.tick_params(axis='both', which='major', labelsize=28)
     
     plt.tight_layout()
     output_path_1 = f"{base_path}_before_kernel.png"
@@ -319,7 +319,7 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
         print(f"  可视化已保存: {output_path_1}")
     
     # 图2：kernel处理后 - 使用的高度曲线
-    fig2, ax2 = plt.subplots(1, 1, figsize=(14, 6))
+    fig2, ax2 = plt.subplots(1, 1, figsize=(14, 4))
     
     # 只显示最终用于检测的kernel processed height
     ax2.plot(bin_centers, smoothed_heights, 'b-', linewidth=2, 
@@ -329,17 +329,17 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
     if len(peak_positions) > 0:
         ax2.plot(peak_positions, peak_heights, 'rx', 
                 markersize=12, markeredgewidth=2.5, 
-                label=f'Detected Plants (n={len(peak_positions)})')
-        
+                label='Detected Plants')
+
         # 添加垂直虚线
         for pos in peak_positions:
             ax2.axvline(pos, color='red', linestyle='--', linewidth=1, alpha=0.3)
     
-    ax2.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=25)
-    ax2.set_ylabel('Height (m)', fontsize=25)
+    ax2.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=32)
+    ax2.set_ylabel('Height (m)', fontsize=32)
     ax2.grid(True, alpha=0.3)
     ax2.legend(loc='lower right', fontsize=25)
-    ax2.tick_params(axis='both', which='major', labelsize=25)
+    ax2.tick_params(axis='both', which='major', labelsize=28)
     
     plt.tight_layout()
     output_path_2 = f"{base_path}_after_kernel.png"

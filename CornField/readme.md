@@ -32,6 +32,8 @@ python crop_pipeline.py data/ifarm_corn.las --crop corn
 python crop_pipeline.py data/morrow_plots.las --crop corn
 python crop_pipeline.py data/0822_corn.las --crop corn
 
+python crop_pipeline.py data/morrow_plots_tile_1_3.las --crop corn
+
 # Soybean方法
 python crop_pipeline.py data/ifarm_soybean_green.las --crop soybean
 python crop_pipeline.py data/ifarm_soybean_yellow.las --crop soybean
@@ -40,12 +42,15 @@ python crop_pipeline.py data/ifarm_soybean_green_west.las --crop soybean
 python crop_pipeline.py data/ifarm_soybean_yellow_east.las --crop soybean
 python crop_pipeline.py data/ifarm_soybean_yellow_west.las --crop soybean
 
+python crop_pipeline.py data/green_soybean_1_1.las --crop soybean
+
 # leaf density estimation
 python leaf_density_estimator.py row_split_output\ifarm_corn\tile_1_1
 python leaf_density_estimator.py row_split_output\morrow_plots\tile_1_0
 python leaf_density_estimator.py row_split_output\0822_corn\tile_2_2
-python leaf_density_estimator.py row_split_output\ifarm_soybean_yellow\tile_3_0
+python leaf_density_estimator.py row_split_output\ifarm_soybean_yellow\tile_2_0
 python leaf_density_estimator.py row_split_output\ifarm_soybean_green\tile_3_1
+
 
 # 使用自定义配置
 python crop_pipeline.py corn.las --method density --config my_config.yaml

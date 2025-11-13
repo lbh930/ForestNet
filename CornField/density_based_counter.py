@@ -166,7 +166,7 @@ def visualize_density_profile(bin_centers, density, smoothed_density,
         output_path: 输出文件路径
         direction: 方向轴
     """
-    fig, ax1 = plt.subplots(1, 1, figsize=(14, 6))
+    fig, ax1 = plt.subplots(1, 1, figsize=(14, 4))
     
     # 只显示平滑后的密度曲线
     ax1.plot(bin_centers, smoothed_density, 'b-', linewidth=3, label='Point Density')
@@ -175,17 +175,17 @@ def visualize_density_profile(bin_centers, density, smoothed_density,
     if len(peak_positions) > 0:
         ax1.plot(peak_positions, peak_densities, 'rx', 
                 markersize=18, markeredgewidth=3.75, 
-                label=f'Detected Plants (n={len(peak_positions)})')
+                label='Detected Plants')
         
         # 添加垂直虚线
         for pos in peak_positions:
             ax1.axvline(pos, color='red', linestyle='--', linewidth=1.5, alpha=0.3)
     
-    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=25)
-    ax1.set_ylabel('Density (weighted by height)', fontsize=25)
+    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=32)
+    ax1.set_ylabel('Density (Points)', fontsize=27)
     ax1.grid(True, alpha=0.3)
     ax1.legend(loc='lower right', fontsize=25)
-    ax1.tick_params(axis='both', which='major', labelsize=25)
+    ax1.tick_params(axis='both', which='major', labelsize=28)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
