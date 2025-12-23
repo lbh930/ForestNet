@@ -14,3 +14,5 @@ TreeMeshGen/presets/__pycache__/*
 *.las
 *.laz
 *.objData/*.pth
+*.out
+*/nohup.out

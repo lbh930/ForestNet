@@ -1,8 +1,9 @@
 import argparse
+import copy
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import laspy
 import numpy as np
@@ -11,6 +12,101 @@ import numpy as np
 # parameters
 # ------------------------
 CELL_SIZE = 1.0       # heightmap grid size (m)
+
+
+_KNOWN_LABEL_DIM_NAMES = (
+    "label",
+    "labels",
+    "tree_id",
+    "treeid",
+    "treeID",
+    "instance",
+    "instance_id",
+    "instanceid",
+)
+
+
+def _find_sidecar_labels_file(input_las_path: str) -> Optional[str]:
+    p = Path(input_las_path)
+    candidates = [
+        p.with_name(f"{p.stem}_labels.npy"),
+        p.with_name(f"{p.stem}_labels.txt"),
+        p.with_name(f"{p.stem}_label.npy"),
+        p.with_name(f"{p.stem}_label.txt"),
+        p.with_suffix(".npy"),
+        p.with_suffix(".txt"),
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return None
+
+
+def _load_labels_file(path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Load labels file.
+
+    Supported formats:
+    - .npy: array with shape (4, N) or (N, 4)
+    - .txt: space-delimited with shape (4, N) or (N, 4)
+
+    Convention:
+      First three rows/cols are x,y,z (meters), last row/col is integer labels.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"labels file not found: {path}")
+
+    if p.suffix.lower() == ".npy":
+        arr = np.load(str(p))
+    elif p.suffix.lower() in {".txt", ".xyz", ".labels"}:
+        arr = np.loadtxt(str(p))
+    else:
+        raise ValueError(f"unsupported labels file extension: {p.suffix} (expected .npy or .txt)")
+
+    if arr.ndim != 2:
+        raise ValueError(f"labels array must be 2D, got shape={arr.shape}")
+
+    if arr.shape[0] == 4:
+        x_l, y_l, z_l, labels = arr[0], arr[1], arr[2], arr[3]
+    elif arr.shape[1] == 4:
+        x_l, y_l, z_l, labels = arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3]
+    else:
+        raise ValueError(
+            f"labels array must have one dimension = 4, got shape={arr.shape}"
+        )
+
+    labels_i = labels.astype(np.int64, copy=False)
+    return (
+        np.asarray(x_l, dtype=np.float64),
+        np.asarray(y_l, dtype=np.float64),
+        np.asarray(z_l, dtype=np.float64),
+        labels_i,
+    )
+
+
+def _save_labels_file(
+    path: str,
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    labels: np.ndarray,
+) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    out = np.vstack(
+        [
+            np.asarray(x, dtype=np.float64),
+            np.asarray(y, dtype=np.float64),
+            np.asarray(z, dtype=np.float64),
+            np.asarray(labels, dtype=np.int64),
+        ]
+    )
+    if p.suffix.lower() == ".npy":
+        np.save(str(p), out)
+    elif p.suffix.lower() == ".txt":
+        np.savetxt(str(p), out, fmt="%.8f")
+    else:
+        raise ValueError(f"unsupported labels output extension: {p.suffix} (use .npy or .txt)")
 
 
 @dataclass
@@ -128,6 +224,12 @@ def simulate_occlusion(
     seed=0,
     *,
     cell_size=CELL_SIZE,
+    labels_in: Optional[str] = None,
+    labels_out: Optional[str] = None,
+    embed_labels: bool = True,
+    embed_labels_dim: str = "label",
+    coord_tol: float = 1e-3,
+    skip_label_coord_check: bool = False,
     verbose=True,
     progress_every=10_000,
 ):
@@ -145,6 +247,40 @@ def simulate_occlusion(
     x = las.x
     y = las.y
     z = las.z
+
+    labels = None
+    if labels_in is None:
+        # If labels already exist in the LAS/LAZ, they will be preserved automatically
+        # by slicing `las.points`. If not, try to find a sidecar labels file.
+        sidecar = _find_sidecar_labels_file(input_las)
+        if sidecar is not None:
+            labels_in = sidecar
+            if verbose:
+                print(f"[simulate] auto-detected labels file: {labels_in}")
+
+    if labels_in is not None:
+        if verbose:
+            print(f"[simulate] labels_in={labels_in}")
+        lx, ly, lz, labels = _load_labels_file(labels_in)
+        if len(labels) != len(z):
+            raise ValueError(
+                f"labels count mismatch: labels={len(labels)} vs las points={len(z)}"
+            )
+        if not skip_label_coord_check:
+            max_dx = float(np.max(np.abs(lx - x)))
+            max_dy = float(np.max(np.abs(ly - y)))
+            max_dz = float(np.max(np.abs(lz - z)))
+            if verbose:
+                print(
+                    "[simulate] label XYZ alignment max abs diff (m): "
+                    f"dx={max_dx:.6g} dy={max_dy:.6g} dz={max_dz:.6g}"
+                )
+            if max(max_dx, max_dy, max_dz) > float(coord_tol):
+                raise ValueError(
+                    "labels XYZ do not match LAS XYZ within tolerance. "
+                    f"max(dx,dy,dz)={max(max_dx, max_dy, max_dz):.6g} > coord_tol={coord_tol}. "
+                    "If you are sure the ordering matches, pass --skip-label-coord-check or increase --coord-tol."
+                )
 
     if verbose:
         print(f"[simulate] loaded points: {len(z):,}")
@@ -183,12 +319,61 @@ def simulate_occlusion(
         print("[simulate] sampling points...")
     keep_mask = np.random.rand(len(P)) < P
 
-    out = laspy.create(point_format=las.header.point_format, file_version=las.header.version)
-    out.header = las.header
     # Preserve all point dimensions (classification, intensity, rgb, etc.)
+    out_header = copy.deepcopy(las.header)
+    out = laspy.LasData(out_header)
     out.points = las.points[keep_mask]
 
+    if labels is not None:
+        # Default behavior: embed labels into output LAS/LAZ as an extra bytes dimension.
+        if embed_labels:
+            dim_name = embed_labels_dim.strip() or "label"
+            if dim_name not in out.point_format.dimension_names:
+                out.add_extra_dim(
+                    laspy.ExtraBytesParams(
+                        name=dim_name,
+                        type=np.int32,
+                        description="Point-wise label (e.g., -1,0,1,2,...)",
+                    )
+                )
+            setattr(out, dim_name, labels[keep_mask].astype(np.int32, copy=False))
+            if verbose:
+                print(f"[simulate] embedded labels into LAS dimension: {dim_name}")
+
+        # Optional: also write a sidecar labels file.
+        if labels_out is not None or (not embed_labels):
+            if labels_out is None:
+                in_labels_path = Path(labels_in)
+                out_path = Path(output_las)
+                labels_out = str(out_path.with_suffix(in_labels_path.suffix))
+            _save_labels_file(labels_out, x[keep_mask], y[keep_mask], z[keep_mask], labels[keep_mask])
+            if verbose:
+                print(f"[simulate] saved labels: {labels_out}")
+
+    # If labels existed in the input LAS/LAZ as an extra dimension (e.g. "treeID"),
+    # they have already been preserved by `out.points = las.points[keep_mask]`.
+    # In verbose mode, print quick stats so it's obvious labels are present.
+    if verbose:
+        dims = set(out.point_format.dimension_names)
+        found_name = next((n for n in _KNOWN_LABEL_DIM_NAMES if n in dims), None)
+        if found_name is not None:
+            try:
+                arr = getattr(out, found_name)
+                print(
+                    f"[simulate] label dimension found: {found_name} "
+                    f"(dtype={arr.dtype}, min={int(arr.min())}, max={int(arr.max())})"
+                )
+            except Exception as e:
+                print(f"[simulate] label dimension found: {found_name} (stats unavailable: {e})")
+        elif labels_in is None:
+            print(
+                "[simulate] note: no labels were embedded or detected. "
+                "If your labels are stored in a sidecar file, place it next to the input as "
+                "<stem>_labels.npy/.txt or pass --labels explicitly."
+            )
+
     out.write(output_las)
+
     if verbose:
         kept = int(np.count_nonzero(keep_mask))
         removed = int(len(P) - kept)
@@ -241,6 +426,46 @@ def main(argv=None):
         help="Random seed (default: 0)",
     )
     parser.add_argument(
+        "--labels",
+        default=None,
+        help=(
+            "Optional labels file (.npy or space-delimited .txt) with 4 rows/cols: x y z label. "
+            "If provided, occlusion is applied to labels and a filtered labels file is written."
+        ),
+    )
+    parser.add_argument(
+        "--labels-out",
+        default=None,
+        help=(
+            "Output labels file path (.npy or .txt). "
+            "Default: same name as output LAS but with labels input extension."
+        ),
+    )
+    parser.add_argument(
+        "--no-embed-labels",
+        action="store_true",
+        help=(
+            "Do not embed labels into output LAS/LAZ. "
+            "If set, a labels file will be written (default path if --labels-out omitted)."
+        ),
+    )
+    parser.add_argument(
+        "--labels-dim",
+        default="label",
+        help="Extra dimension name to store labels in LAS/LAZ (default: label)",
+    )
+    parser.add_argument(
+        "--coord-tol",
+        type=float,
+        default=1e-3,
+        help="Max allowed absolute XYZ difference (m) between LAS and labels file (default: 1e-3)",
+    )
+    parser.add_argument(
+        "--skip-label-coord-check",
+        action="store_true",
+        help="Skip XYZ alignment check between LAS and labels file (default: disabled)",
+    )
+    parser.add_argument(
         "--progress-every",
         type=int,
         default=10_000,
@@ -258,7 +483,7 @@ def main(argv=None):
     if output_las is None:
         in_path = Path(args.input)
         kappa_str = f"{args.kappa:g}"
-        out_name = f"{in_path.stem}_occlusion_k={kappa_str}.las"
+        out_name = f"{in_path.stem}_occlusion_k={kappa_str}{in_path.suffix}"
         output_las = str(in_path.with_name(out_name))
 
     simulate_occlusion(
@@ -267,6 +492,12 @@ def main(argv=None):
         kappa=args.kappa,
         seed=args.seed,
         cell_size=args.cell_size,
+        labels_in=args.labels,
+        labels_out=args.labels_out,
+        embed_labels=not args.no_embed_labels,
+        embed_labels_dim=args.labels_dim,
+        coord_tol=args.coord_tol,
+        skip_label_coord_check=args.skip_label_coord_check,
         verbose=not args.quiet,
         progress_every=args.progress_every,
     )
