@@ -11,7 +11,7 @@ import numpy as np
 # ------------------------
 # parameters
 # ------------------------
-CELL_SIZE = 1.0       # heightmap grid size (m)
+CELL_SIZE = 2.0       # heightmap grid size (m)
 
 
 _KNOWN_LABEL_DIM_NAMES = (
@@ -175,16 +175,25 @@ def canopy_height_per_point(
     z: np.ndarray,
     *,
     cell_size: float,
+    mode: str = "bilinear",
+    max_grid_cells: int = 50_000_000,
     progress: Optional[ProgressPrinter] = None,
 ):
     """Build a low-resolution top-view heightmap and return canopy Z for each point.
 
     Heightmap definition: per (x,y) grid cell, canopy height is max(Z) of points in that cell.
+
+    Modes:
+    - "nearest": use the cell's max(Z) (piecewise-constant per cell)
+    - "bilinear": bilinear interpolation between adjacent cell max(Z) values for smooth transitions
     """
     if progress is None:
         progress = ProgressPrinter(enabled=False)
     progress.label = progress.label or "heightmap"
     progress.start(total=None)
+
+    if mode not in {"nearest", "bilinear"}:
+        raise ValueError(f"unsupported heightmap mode: {mode} (expected 'nearest' or 'bilinear')")
 
     ix, iy, x0, y0 = _compute_cell_indices(x, y, cell_size=cell_size)
 
@@ -197,15 +206,60 @@ def canopy_height_per_point(
     unique_keys, idx_start = np.unique(key_s, return_index=True)
     cell_max_z = np.maximum.reduceat(z_s, idx_start)
 
-    # Map each point back to its cell max Z.
+    # Map each point back to its cell max Z (nearest/cell-constant).
     cell_index = np.searchsorted(unique_keys, key)
-    canopy_z = cell_max_z[cell_index]
+    canopy_z_nearest = cell_max_z[cell_index]
+
+    if mode == "nearest":
+        canopy_z = canopy_z_nearest
+    else:
+        # Bilinear interpolation between 4 neighboring cell max-Z values.
+        nx = int(ix.max()) + 1
+        ny = int(iy.max()) + 1
+        if nx <= 0 or ny <= 0:
+            canopy_z = canopy_z_nearest
+        elif (nx * ny) > int(max_grid_cells):
+            # Avoid massive dense allocations; fall back to nearest.
+            canopy_z = canopy_z_nearest
+        else:
+            grid = np.full((nx, ny), np.nan, dtype=np.float32)
+            ux = (unique_keys >> 32).astype(np.int64)
+            uy = (unique_keys & np.int64(0xFFFFFFFF)).astype(np.int64)
+            grid[ux, uy] = cell_max_z.astype(np.float32, copy=False)
+
+            gx = (x - x0) / float(cell_size)
+            gy = (y - y0) / float(cell_size)
+            fx = gx - ix
+            fy = gy - iy
+
+            ix0 = ix
+            iy0 = iy
+            ix1 = np.minimum(ix0 + 1, nx - 1)
+            iy1 = np.minimum(iy0 + 1, ny - 1)
+
+            z00 = grid[ix0, iy0]
+            z10 = grid[ix1, iy0]
+            z01 = grid[ix0, iy1]
+            z11 = grid[ix1, iy1]
+
+            w00 = (1.0 - fx) * (1.0 - fy)
+            w10 = fx * (1.0 - fy)
+            w01 = (1.0 - fx) * fy
+            w11 = fx * fy
+
+            canopy_z = (z00 * w00 + z10 * w10 + z01 * w01 + z11 * w11).astype(np.float64, copy=False)
+
+            # If any neighbor is missing (nan), fall back to nearest cell value.
+            invalid = ~(np.isfinite(z00) & np.isfinite(z10) & np.isfinite(z01) & np.isfinite(z11))
+            if np.any(invalid):
+                canopy_z[invalid] = canopy_z_nearest[invalid]
 
     progress.done()
     meta = {
         "x0": x0,
         "y0": y0,
         "cell_size": float(cell_size),
+        "mode": mode,
         "unique_cells": int(len(unique_keys)),
         "min_ix": int(ix.min()),
         "max_ix": int(ix.max()),
@@ -232,6 +286,7 @@ def simulate_occlusion(
     skip_label_coord_check: bool = False,
     verbose=True,
     progress_every=10_000,
+    heightmap_mode: str = "bilinear",
 ):
     np.random.seed(seed)
 
@@ -292,6 +347,7 @@ def simulate_occlusion(
         y,
         z,
         cell_size=cell_size,
+        mode=heightmap_mode,
         progress=ProgressPrinter(enabled=verbose, every=progress_every, label="heightmap"),
     )
     if verbose:
@@ -472,6 +528,12 @@ def main(argv=None):
         help="Print progress every N iterations (default: 10000)",
     )
     parser.add_argument(
+        "--heightmap-mode",
+        choices=["nearest", "bilinear"],
+        default="bilinear",
+        help="Canopy height lookup mode (default: bilinear)",
+    )
+    parser.add_argument(
         "--quiet",
         action="store_true",
         help="Disable progress/meta prints (default: enabled)",
@@ -500,6 +562,7 @@ def main(argv=None):
         skip_label_coord_check=args.skip_label_coord_check,
         verbose=not args.quiet,
         progress_every=args.progress_every,
+        heightmap_mode=args.heightmap_mode,
     )
 
 # ------------------------
