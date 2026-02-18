@@ -1,0 +1,84 @@
+input_data:
+  point_cloud_file_path: "example_forest.las"
+  point_cloud_file_format: "las"
+  csv_x_column_name: "x"
+  csv_y_column_name: "y"
+  csv_z_column_name: "z"
+  area_of_interest_bounds_xy: null
+
+ground_surface_estimation:
+  ground_estimation_method_name: "grid_percentile"
+  ground_grid_cell_size_meters: 1.0
+  ground_elevation_percentile_value: 5.0
+  minimum_points_required_per_ground_cell: 3
+  empty_ground_cell_fill_method_name: "nearest_neighbor"
+
+height_normalization:
+  minimum_normalized_height_meters: 0.0
+  maximum_normalized_height_meters: 50.0
+
+voxel_density_model:
+  voxel_size_x_meters: 0.5
+  voxel_size_y_meters: 0.5
+  voxel_size_z_meters: 0.5
+  occupancy_point_count_threshold: 1
+
+occlusion_correction_beer_lambert:
+  enable_occlusion_correction: true
+  vertical_processing_direction: "top_to_bottom"
+  extinction_coefficient_alpha: 0.35
+  minimum_transmission_value: 0.001
+  maximum_density_gain_factor: 8.0
+
+vertical_profile_output:
+  profile_height_bin_size_meters: 0.5
+  output_shape_normalized_profile: true
+
+quality_control:
+  enable_subsampling_stability_check: true
+  subsampling_keep_ratio: 0.5
+  subsampling_random_seed: 42
+
+runtime_progress_logging:
+  enable_progress_prints: true
+
+visualization_outputs:
+  enable_visualization_outputs: true
+  figure_dpi_value: 150
+  figure_colormap_name: "viridis"
+  maximum_surface_grid_resolution_for_peak_density_height_map: 180
+  save_ground_elevation_grid_png: true
+  save_normalized_height_histogram_png: true
+  save_observed_vs_corrected_vertical_profile_png: true
+  save_observed_xy_density_map_png: true
+  save_corrected_xy_density_map_png: true
+  save_correction_gain_distribution_histogram_png: true
+  save_subsampling_profile_comparison_png: true
+  save_observed_peak_density_height_surface_png: true
+  save_corrected_peak_density_height_surface_png: true
+
+voxel_block_density_visualization:
+  voxel_density_grid_source_mode: "both"
+  voxel_block_subsample_step_x: 4
+  voxel_block_subsample_step_y: 4
+  voxel_block_subsample_step_z: 2
+  minimum_density_percentile_to_render: 92.0
+  use_shared_density_threshold_reference: true
+  shared_density_threshold_reference_mode: "observed"
+  maximum_number_of_voxel_blocks_to_render: 25000
+  density_color_scaling_method_name: "log1p"
+  voxel_block_colormap_name: "viridis"
+  voxel_block_transparency_alpha_value: 0.95
+  enforce_equal_axis_aspect_ratio_1_to_1_to_1: true
+  view_elevation_degrees: 24.0
+  view_azimuth_degrees: -58.0
+  figure_dpi_value: 170
+
+output_files:
+  output_directory_path: "outputs/run_001"
+  save_ground_elevation_grid: true
+  save_height_normalized_point_cloud: false
+  save_observed_voxel_density_grid: true
+  save_corrected_voxel_density_grid: true
+  save_observed_vertical_profile_csv: true
+  save_corrected_vertical_profile_csv: true
