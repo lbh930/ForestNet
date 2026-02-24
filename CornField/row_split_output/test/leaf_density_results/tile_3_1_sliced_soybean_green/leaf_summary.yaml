@@ -1,0 +1,13 @@
+leaf_density_summary:
+  input_file: tile_3_1_sliced_soybean_green_full.las
+  parameters:
+    voxel_size_m:
+      vx: 0.005
+      vy: 0.005
+      vz: 0.005
+    projection_function_G: 0.5
+    ground_removal_percentile: 15.0
+  results:
+    LAI_m2_m2: 2.1212721456622115
+    LAD_mean_m2_m3: 2.737125349241563
+    LAD_max_m2_m3: 6.264582137311869

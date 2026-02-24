@@ -1,0 +1,8 @@
+Crop Density Summary
+============================================================
+Input file: cloud0.las
+Method: density
+Total plants: 0
+Total area: 2900.00 m²
+Average density: 0.000 plants/m²
+Total time: 953.74s

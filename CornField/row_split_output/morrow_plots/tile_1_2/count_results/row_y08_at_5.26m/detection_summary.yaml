@@ -1,0 +1,59 @@
+detection_summary:
+  method: density
+  statistics:
+    input_points: 78139
+    detected_plants: 9
+  parameters:
+    direction: x
+    expected_spacing_cm: 7.000000000000001
+    bin_size_cm: 1.0
+    ground_removal: true
+  preprocessing:
+    ground_removal:
+      bottom_percentile: 20.0
+      top_percentile: 30.0
+    statistical_outlier_removal:
+      k_neighbors: 20
+      std_ratio: 2.0
+  plants:
+  - id: 1
+    x_m: -13.487799911499025
+    y_m: 5.26
+    height_m: 2.0
+  - id: 2
+    x_m: -13.237799911499025
+    y_m: 5.26
+    height_m: 1.9669999999999999
+  - id: 3
+    x_m: -7.917799911499023
+    y_m: 5.26
+    height_m: 2.1350000000000002
+  - id: 4
+    x_m: -6.0777999114990235
+    y_m: 5.26
+    height_m: 1.0070000000000001
+  - id: 5
+    x_m: -5.447799911499023
+    y_m: 5.26
+    height_m: 1.971
+  - id: 6
+    x_m: -4.5777999114990235
+    y_m: 5.26
+    height_m: 1.8129999999999997
+  - id: 7
+    x_m: -4.467799911499023
+    y_m: 5.26
+    height_m: 1.8129999999999997
+  - id: 8
+    x_m: -3.8377999114990233
+    y_m: 5.26
+    height_m: 0.8370000000000002
+  - id: 9
+    x_m: -3.6977999114990228
+    y_m: 5.26
+    height_m: 1.6380000000000003
+  spacing_statistics:
+    mean_cm: 122.37500000000003
+    std_cm: 163.37222644929588
+    min_cm: 11.000000000000032
+    max_cm: 532.0000000000001

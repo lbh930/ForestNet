@@ -1,6 +1,6 @@
 # 并行处理配置
 parallel:
-  max_workers: 20  # 最大进程数，设为 null 或 0 则使用所有CPU核心
+  max_workers: 12 # 最大进程数，设为 null 或 0 则使用所有CPU核心
 
 # 玉米检测配置
 corn:

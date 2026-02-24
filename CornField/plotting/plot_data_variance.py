@@ -6,11 +6,11 @@ import math
 # 可修改数据区域
 # =========================
 fields = [
-    "Field A Corn",
-    "Field B Corn",
-    "Field C Corn",
-    "Field D Soybean",
-    "Field E Soybean",
+    "Field A\nCorn",
+    "Field B\nCorn",
+    "Field C\nCorn",
+    "Field D\nSoybean",
+    "Field E\nSoybean",
 ]
 
 density = [7.792, 7.258, 10.3, 18.615, 19.592]
@@ -21,29 +21,33 @@ leaf_length = [62.667, 51.9, None, 8.5, 6.0]
 leaf_count = [12.667, 10.333, None, 56.33, 16.67]
 
 # consistent color palette
-colors = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F"]
+colors = ["#FFFFFF", "#DDAA33", "#BB5566", "#004488", "#000000"]
+  # Set1 颜色方案
 
-font_size = 40
+font_size = 54
 
 # =========================
 # 图1：Density vs Height
 # =========================
-fig, ax = plt.subplots(figsize=(10, 10), constrained_layout=True)
+fig, ax = plt.subplots(figsize=(12, 12), constrained_layout=True)
 
 # 手动设置文字偏移，避免重叠
 text_offsets = [
     (0.3, 0.05),   
     (0.3, -0.1),   
     (0.3, -0.05),
-    (0.3, -0.05),
-    (0.3, 0.05),
+    (-0.5, -0.1),
+    (-0.5, 0.1),
 ]
 
 for i in range(len(fields)):
-    ax.scatter(density[i], height[i], color=colors[i], s=600)
+    ax.scatter(density[i], height[i], color=colors[i], s=800, linewidths=2, edgecolors='black')
+    ax.grid(True, linestyle='--', alpha=0.7, linewidth=2)
+    # Put Field D & E (indices 3,4) labels to the left of their points
+    ha = 'right' if i in (3, 4) else 'left'
     ax.text(density[i] + text_offsets[i][0],
             height[i] + text_offsets[i][1],
-            fields[i], fontsize=font_size - 4, va='center')
+            fields[i], fontsize=font_size - 4, va='center', ha=ha)
 
 # 计算边距
 x_margin = (max(density) - min(density)) * 0.20
@@ -53,8 +57,8 @@ y_margin = (max(height) - min(height)) * 0.20
 ax.set_xlim(min(density) - x_margin, max(density) + x_margin)
 ax.set_ylim(min(height) - y_margin, max(height) + y_margin)
 
-ax.set_xlabel("Density (plants/m²)", fontsize=font_size)
-ax.set_ylabel("Average Height (m)", fontsize=font_size)
+ax.set_xlabel("Avg Canopy Density \n (plants/m²)", fontsize=font_size)
+ax.set_ylabel("Avg Canopy Height (m)", fontsize=font_size)
 ax.tick_params(axis='both', labelsize=font_size)
 
 plt.savefig("scatter_density_height.png", dpi=300)
@@ -74,20 +78,23 @@ for i in range(len(fields)):
         leaf_density.append(density[i] * leaf_count[i])
         field_valid.append(fields[i])
 
-fig, ax = plt.subplots(figsize=(10, 10), constrained_layout=True)
+fig, ax = plt.subplots(figsize=(12, 12), constrained_layout=True)
 
 text_offsets_leaf = [
-    (15, 10),    
-    (15, -15),   
-    (15, 10),    
-    (15, 10),    
+    (-15, 35),    # Field A Corn (left side)
+    (-15, -20),   # Field B Corn (left side)
+    (15, 10),     # Field D Soybean (default right side)
+    (15, 10),     # Field E Soybean (default right side)
 ]
 
 for i in range(len(field_valid)):
-    ax.scatter(leaf_area[i], leaf_density[i], color=colors[i], s=600)
+    ax.scatter(leaf_area[i], leaf_density[i], color=colors[i], s=800, linewidths=2, edgecolors='black')
+    ax.grid(True, linestyle='--', alpha=0.7, linewidth=2)
+    # Left-align labels where x offset is negative (A,B)
+    ha = 'right' if text_offsets_leaf[i][0] < 0 else 'left'
     ax.text(leaf_area[i] + text_offsets_leaf[i][0],
             leaf_density[i] + text_offsets_leaf[i][1],
-            field_valid[i], fontsize=font_size - 4, va='center')
+            field_valid[i], fontsize=font_size - 4, va='center', ha=ha)
 
 # 计算边距
 x_margin = (max(leaf_area) - min(leaf_area)) * 0.25
@@ -112,12 +119,16 @@ for i in range(len(fields)):
         field_lai.append(fields[i])
         lai_valid.append(lai[i])
 
-fig, ax = plt.subplots(figsize=(10, 10), constrained_layout=True)
+fig, ax = plt.subplots(figsize=(12, 12), constrained_layout=True)
 
-bars = ax.bar(field_lai, lai_valid, color=colors[:len(field_lai)])
-ax.set_xticklabels(field_lai, rotation=30, ha='right', fontsize=font_size*0.75)
+#shift right a bit to center bars
+bars = ax.bar(field_lai, lai_valid, 
+              color=colors[:len(field_lai)], edgecolor="black", linewidth=2)
 
-ax.set_ylabel("LAI (m²/m²)", fontsize=font_size)
+
+ax.set_xticklabels(field_lai, rotation=35, ha='right', fontsize=font_size*0.8)
+
+ax.set_ylabel("Leaf Area Index (m²/m²)", fontsize=font_size)
 ax.set_ylim(bottom=0)
 ax.tick_params(axis='y', labelsize=font_size)
 

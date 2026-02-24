@@ -1,0 +1,21 @@
+Crop Density Summary
+============================================================
+Input file: data\ifarm_corn.las
+Crop type: corn
+Method: density
+Total plants: 6611
+Total area: 800.00 m²
+Average density: 8.264 plants/m²
+Average height: 2.930 ± 0.152 m
+Height range: [1.186, 3.330] m
+Total time: 412.83s
+
+Per Tile Summary:
+  Tile (0, 1): 827 plants
+  Tile (1, 1): 808 plants
+  Tile (2, 1): 929 plants
+  Tile (1, 0): 804 plants
+  Tile (0, 0): 704 plants
+  Tile (2, 0): 892 plants
+  Tile (3, 1): 819 plants
+  Tile (3, 0): 828 plants

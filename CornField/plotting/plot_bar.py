@@ -2,11 +2,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 plt.rcParams.update({
-    "font.size": 32,
-    "axes.labelsize": 32,
-    "xtick.labelsize": 32,
-    "ytick.labelsize": 32,
-    "legend.fontsize": 32
+    "font.size": 50,
+    "axes.labelsize": 50,
+    "xtick.labelsize": 50,
+    "ytick.labelsize": 50,
+    "legend.fontsize": 50
 })
 
 # =====================================================================
@@ -15,28 +15,40 @@ plt.rcParams.update({
 
 # ---- LEAF AREA INDEX ----
 lai_data = {
-    "Field D":  {"GT": 3.8501, "Est": 3.153},
-    "Field E Soybean": {"GT": 0.6618, "Est": 0.912},
-    "Field A Corn":           {"GT": 3.80522, "Est": 2.736},
-    "Field B Corn":          {"GT": 1.58354, "Est": 2.310},
+    "Field D\nSoybean": {
+        "GT": 3.8501,
+        "Est": 3.281,
+    },
+    "Field E\nSoybean": {
+        "GT": 0.6618,
+        "Est": 0.740,
+    },
+    "Field A\nCorn": {
+        "GT": 3.80522,
+        "Est": 3.281,
+    },
+    "Field B\nCorn": {
+        "GT": 1.58354,
+        "Est": 1.876,
+    },
 }
 
 # ---- DENSITY ----
 density_data = {
-    "10/05 Field A Corn":       {"GT": 7.792,  "Est": 8.287},
-    "10/22 Field B Corn":      {"GT": 7.258,  "Est": 6.62},
-    "Field C Corn":             {"GT": 10.3,   "Est": 8.355},
-    "Field D Soybean":    {"GT": 18.615, "Est": 18.496},
-    "Field E Soybean":   {"GT": 19.592, "Est": 18.645},
+    "Field A\nCorn":       {"GT": 7.792,  "Est": 8.287},
+    "Field B\nCorn":      {"GT": 7.258,  "Est": 6.62},
+    "Field C\nCorn":             {"GT": 10.3,   "Est": 8.355},
+    "Field D\nSoybean":    {"GT": 18.615, "Est": 18.496},
+    "Field E\nSoybean":   {"GT": 19.592, "Est": 18.645},
 }
 
 # ---- HEIGHT ----
 height_data = {
-    "10/05 Field A Corn":       {"GT": 2.483, "Est": 2.91},
-    "10/22 Field B Corn":      {"GT": 2.06,  "Est": 1.979},
-    "Field C Corn":             {"GT": 2.41,  "Est": 2.563},
-    "Field D":    {"GT": 0.674, "Est": 0.724},
-    "Field E Soybean":   {"GT": 0.753, "Est": 0.845},
+    "Field A\nCorn":       {"GT": 2.483, "Est": 2.91},
+    "Field B\nCorn":      {"GT": 2.06,  "Est": 1.979},
+    "Field C\nCorn":             {"GT": 2.41,  "Est": 2.563},
+    "Field D\nSoybean":    {"GT": 0.674, "Est": 0.724},
+    "Field E\nSoybean":   {"GT": 0.753, "Est": 0.845},
 }
 
 # =====================================================================
@@ -75,12 +87,12 @@ def plot_bar(data_dict, ylabel, output_filename):
     fig, ax = plt.subplots(figsize=(24, 10))
 
     # Matplotlib 对 None 会报错，这里已转换为 NaN；含 NaN 的柱会被跳过绘制
-    ax.bar(x - width/2, gt_vals,  width=width, label="Ground Truth", color="#1f77b4")
-    ax.bar(x + width/2, est_vals, width=width, label="Estimated",    color="#ff7f0e")
-
-    ax.set_ylabel(ylabel)
+    ax.bar(x - width/2 - width/2, gt_vals,  width=width, label="GT", color="#DDAA33")
+    ax.bar(x, est_vals, width=width, label="Est",    color="#004488")
+    
+    ax.set_ylabel(ylabel, fontsize=45)
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=25, ha="right")
+    ax.set_xticklabels(labels, rotation=0, ha="right")
 
     ax.legend()
     ax.grid(axis="y", linestyle="--", alpha=0.4)
@@ -97,4 +109,4 @@ def plot_bar(data_dict, ylabel, output_filename):
 
 plot_bar(density_data, "Density (plants/m²)", "placeholder_density_barplot.png")
 plot_bar(height_data,  "Average Height (m)",  "placeholder_height_barplot.png")
-plot_bar(lai_data,     "LAI (m²/m²)",         "placeholder_lai_barplot.png")
+plot_bar(lai_data,     "Leaf Area Index (m²/m²)",         "placeholder_lai_barplot.png")

@@ -1,0 +1,95 @@
+detection_summary:
+  method: density
+  statistics:
+    input_points: 72847
+    detected_plants: 18
+  parameters:
+    direction: x
+    expected_spacing_cm: 7.000000000000001
+    bin_size_cm: 1.0
+    ground_removal: true
+  preprocessing:
+    ground_removal:
+      bottom_percentile: 20.0
+      top_percentile: 30.0
+    statistical_outlier_removal:
+      k_neighbors: 20
+      std_ratio: 2.0
+  plants:
+  - id: 1
+    x_m: -11.290864115797325
+    y_m: 11.34
+    height_m: 0.9649999999999999
+  - id: 2
+    x_m: -10.941175029502908
+    y_m: 11.34
+    height_m: 0.5659999999999998
+  - id: 3
+    x_m: -10.321725790924228
+    y_m: 11.34
+    height_m: 2.191
+  - id: 4
+    x_m: -10.241796856914075
+    y_m: 11.34
+    height_m: 2.1719999999999997
+  - id: 5
+    x_m: -7.793973252853162
+    y_m: 11.34
+    height_m: 2.3120000000000003
+  - id: 6
+    x_m: -7.574168684325242
+    y_m: 11.34
+    height_m: 2.2199999999999998
+  - id: 7
+    x_m: -7.374346349299862
+    y_m: 11.34
+    height_m: 2.224
+  - id: 8
+    x_m: -7.08460396351306
+    y_m: 11.34
+    height_m: 2.2680000000000002
+  - id: 9
+    x_m: -5.8257232528531615
+    y_m: 11.34
+    height_m: 2.393
+  - id: 10
+    x_m: -5.725812085340471
+    y_m: 11.34
+    height_m: 2.3330000000000006
+  - id: 11
+    x_m: -5.605918684325243
+    y_m: 11.34
+    height_m: 2.3550000000000004
+  - id: 12
+    x_m: -4.736691526964837
+    y_m: 11.34
+    height_m: 2.4749999999999996
+  - id: 13
+    x_m: -4.4669313746805726
+    y_m: 11.34
+    height_m: 2.4090000000000003
+  - id: 14
+    x_m: -4.357029090416614
+    y_m: 11.34
+    height_m: 2.3520000000000003
+  - id: 15
+    x_m: -4.107251171634887
+    y_m: 11.34
+    height_m: 2.3920000000000003
+  - id: 16
+    x_m: -4.027322237624735
+    y_m: 11.34
+    height_m: 2.3640000000000003
+  - id: 17
+    x_m: -3.8974377198582375
+    y_m: 11.34
+    height_m: 2.3130000000000006
+  - id: 18
+    x_m: -3.6876242680815876
+    y_m: 11.34
+    height_m: 1.56
+  spacing_statistics:
+    mean_cm: 44.72494028068081
+    std_cm: 58.68705419631518
+    min_cm: 7.992893401015255
+    max_cm: 244.7823604060913

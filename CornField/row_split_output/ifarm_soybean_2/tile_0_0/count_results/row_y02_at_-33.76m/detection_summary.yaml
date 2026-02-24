@@ -1,0 +1,96 @@
+detection_summary:
+  method: height
+  statistics:
+    input_points: 12485
+    detected_plants: 18
+  parameters:
+    direction: x
+    expected_spacing_cm: 8.0
+    bin_size_cm: 0.5
+    ground_removal: true
+    height_metric: max
+  preprocessing:
+    ground_removal:
+      bottom_percentile: 30.0
+      top_percentile: 30.0
+    statistical_outlier_removal:
+      k_neighbors: 20
+      std_ratio: 2.0
+  plants:
+  - id: 1
+    x_m: -7.500668111369649
+    y_m: -33.76
+    height_m: 1.0822711574208594
+  - id: 2
+    x_m: -7.420694340877846
+    y_m: -33.76
+    height_m: 1.0979597127332816
+  - id: 3
+    x_m: -7.305732045795878
+    y_m: -33.76
+    height_m: 1.0980618559484228
+  - id: 4
+    x_m: -7.030822209730305
+    y_m: -33.76
+    height_m: 1.099417728384215
+  - id: 5
+    x_m: -6.925856635959812
+    y_m: -33.76
+    height_m: 1.0989671523886895
+  - id: 6
+    x_m: -6.645948439238501
+    y_m: -33.76
+    height_m: 1.0963814557707035
+  - id: 7
+    x_m: -6.500995980222108
+    y_m: -33.76
+    height_m: 1.088774502879486
+  - id: 8
+    x_m: -6.371038603172927
+    y_m: -33.76
+    height_m: 1.0977739346771973
+  - id: 9
+    x_m: -6.261074668746698
+    y_m: -33.76
+    height_m: 1.0918400896929867
+  - id: 10
+    x_m: -6.081133685140141
+    y_m: -33.76
+    height_m: 1.0891775032188713
+  - id: 11
+    x_m: -5.811222209730305
+    y_m: -33.76
+    height_m: 1.0979799144847355
+  - id: 12
+    x_m: -5.611287783500797
+    y_m: -33.76
+    height_m: 1.0991624524211274
+  - id: 13
+    x_m: -5.4263484392385015
+    y_m: -33.76
+    height_m: 1.086372061883994
+  - id: 14
+    x_m: -5.341376308090961
+    y_m: -33.76
+    height_m: 1.0941234364135721
+  - id: 15
+    x_m: -5.1714320457958785
+    y_m: -33.76
+    height_m: 1.0923590251406614
+  - id: 16
+    x_m: -5.086459914648337
+    y_m: -33.76
+    height_m: 1.0947632624016723
+  - id: 17
+    x_m: -4.966499258910632
+    y_m: -33.76
+    height_m: 1.0960582756625348
+  - id: 18
+    x_m: -4.7015861441565345
+    y_m: -33.76
+    height_m: 1.0887190687534543
+  spacing_statistics:
+    mean_cm: 16.465188042430086
+    std_cm: 6.90142389137751
+    min_cm: 7.997377049180265
+    max_cm: 27.990819672131106

@@ -1,0 +1,143 @@
+detection_summary:
+  method: density
+  statistics:
+    input_points: 129856
+    detected_plants: 30
+  parameters:
+    direction: x
+    expected_spacing_cm: 7.000000000000001
+    bin_size_cm: 1.0
+    ground_removal: true
+  preprocessing:
+    ground_removal:
+      bottom_percentile: 20.0
+      top_percentile: 30.0
+    statistical_outlier_removal:
+      k_neighbors: 20
+      std_ratio: 2.0
+  plants:
+  - id: 1
+    x_m: -34.6872998046875
+    y_m: -0.58
+    height_m: 1.7640000000000002
+  - id: 2
+    x_m: -31.167299804687502
+    y_m: -0.58
+    height_m: 2.2110000000000003
+  - id: 3
+    x_m: -30.8272998046875
+    y_m: -0.58
+    height_m: 1.621
+  - id: 4
+    x_m: -30.2172998046875
+    y_m: -0.58
+    height_m: 1.984
+  - id: 5
+    x_m: -29.917299804687502
+    y_m: -0.58
+    height_m: 2.391
+  - id: 6
+    x_m: -29.7972998046875
+    y_m: -0.58
+    height_m: 2.1580000000000004
+  - id: 7
+    x_m: -29.7072998046875
+    y_m: -0.58
+    height_m: 2.23
+  - id: 8
+    x_m: -29.5472998046875
+    y_m: -0.58
+    height_m: 2.314
+  - id: 9
+    x_m: -29.3872998046875
+    y_m: -0.58
+    height_m: 2.282
+  - id: 10
+    x_m: -29.2472998046875
+    y_m: -0.58
+    height_m: 2.434
+  - id: 11
+    x_m: -29.0272998046875
+    y_m: -0.58
+    height_m: 2.4320000000000004
+  - id: 12
+    x_m: -28.8572998046875
+    y_m: -0.58
+    height_m: 2.649
+  - id: 13
+    x_m: -28.7472998046875
+    y_m: -0.58
+    height_m: 2.501
+  - id: 14
+    x_m: -28.6172998046875
+    y_m: -0.58
+    height_m: 2.319
+  - id: 15
+    x_m: -28.3972998046875
+    y_m: -0.58
+    height_m: 2.19
+  - id: 16
+    x_m: -28.2872998046875
+    y_m: -0.58
+    height_m: 2.364
+  - id: 17
+    x_m: -28.2172998046875
+    y_m: -0.58
+    height_m: 2.425
+  - id: 18
+    x_m: -28.057299804687503
+    y_m: -0.58
+    height_m: 2.5829999999999997
+  - id: 19
+    x_m: -27.807299804687503
+    y_m: -0.58
+    height_m: 2.688
+  - id: 20
+    x_m: -27.627299804687503
+    y_m: -0.58
+    height_m: 2.64
+  - id: 21
+    x_m: -27.4772998046875
+    y_m: -0.58
+    height_m: 2.652
+  - id: 22
+    x_m: -27.3672998046875
+    y_m: -0.58
+    height_m: 2.6750000000000003
+  - id: 23
+    x_m: -27.237299804687503
+    y_m: -0.58
+    height_m: 2.586
+  - id: 24
+    x_m: -27.0672998046875
+    y_m: -0.58
+    height_m: 2.588
+  - id: 25
+    x_m: -26.987299804687503
+    y_m: -0.58
+    height_m: 2.4299999999999997
+  - id: 26
+    x_m: -26.847299804687502
+    y_m: -0.58
+    height_m: 2.587
+  - id: 27
+    x_m: -26.6172998046875
+    y_m: -0.58
+    height_m: 2.667
+  - id: 28
+    x_m: -26.4772998046875
+    y_m: -0.58
+    height_m: 2.735
+  - id: 29
+    x_m: -25.9772998046875
+    y_m: -0.58
+    height_m: 2.2670000000000003
+  - id: 30
+    x_m: -25.847299804687502
+    y_m: -0.58
+    height_m: 1.928
+  spacing_statistics:
+    mean_cm: 30.482758620689644
+    std_cm: 61.88065303450029
+    min_cm: 7.000000000000028
+    max_cm: 351.9999999999996

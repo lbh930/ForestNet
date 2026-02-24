@@ -1,0 +1,75 @@
+detection_summary:
+  method: density
+  statistics:
+    input_points: 67486
+    detected_plants: 13
+  parameters:
+    direction: x
+    expected_spacing_cm: 7.000000000000001
+    bin_size_cm: 1.0
+    ground_removal: true
+  preprocessing:
+    ground_removal:
+      bottom_percentile: 20.0
+      top_percentile: 30.0
+    statistical_outlier_removal:
+      k_neighbors: 20
+      std_ratio: 2.0
+  plants:
+  - id: 1
+    x_m: -11.429775629045992
+    y_m: 6.74
+    height_m: 1.6380000000000003
+  - id: 2
+    x_m: -11.279927335746372
+    y_m: 6.74
+    height_m: 1.6919999999999997
+  - id: 3
+    x_m: -11.120089156226776
+    y_m: 6.74
+    height_m: 1.784
+  - id: 4
+    x_m: -11.040170066466978
+    y_m: 6.74
+    height_m: 1.9869999999999999
+  - id: 5
+    x_m: -10.680534162547886
+    y_m: 6.74
+    height_m: 1.988
+  - id: 6
+    x_m: -8.262981697314006
+    y_m: 6.74
+    height_m: 2.407
+  - id: 7
+    x_m: -4.646642885683158
+    y_m: 6.74
+    height_m: 2.222
+  - id: 8
+    x_m: -4.406885616403764
+    y_m: 6.74
+    height_m: 2.1609999999999996
+  - id: 9
+    x_m: -4.247047436884169
+    y_m: 6.74
+    height_m: 2.073
+  - id: 10
+    x_m: -4.177118233344347
+    y_m: 6.74
+    height_m: 1.9620000000000002
+  - id: 11
+    x_m: -4.0971991435845485
+    y_m: 6.74
+    height_m: 1.5350000000000001
+  - id: 12
+    x_m: -3.897401419185054
+    y_m: 6.74
+    height_m: 1.5870000000000002
+  - id: 13
+    x_m: -3.637664377465712
+    y_m: 6.74
+    height_m: 2.0110000000000006
+  spacing_statistics:
+    mean_cm: 64.93426042983566
+    std_cm: 108.96534508828779
+    min_cm: 6.992920353982246
+    max_cm: 361.63388116308477

@@ -21,7 +21,9 @@ from common import (
     remove_ground_points,
     statistical_outlier_removal,
     visualize_3d_with_peaks,
-    calculate_peak_heights
+    calculate_peak_heights,
+    get_plot_style,
+    apply_axis_style
 )
 
 
@@ -150,7 +152,7 @@ def detect_plants_from_density(bin_centers, density, expected_spacing,
     return peak_positions, peak_densities, smoothed_density
 
 
-def visualize_density_profile(bin_centers, density, smoothed_density, 
+def visualize_density_profile(bin_centers, density, smoothed_density,
                               peak_positions, peak_densities, raw_counts,
                               output_path, direction, verbose=False):
     """
@@ -166,7 +168,8 @@ def visualize_density_profile(bin_centers, density, smoothed_density,
         output_path: 输出文件路径
         direction: 方向轴
     """
-    fig, ax1 = plt.subplots(1, 1, figsize=(14, 4))
+    style = get_plot_style('density_profile')
+    fig, ax1 = plt.subplots(1, 1, figsize=style.get('figsize', (14, 4)))
     
     # 只显示平滑后的密度曲线
     ax1.plot(bin_centers, smoothed_density, 'b-', linewidth=3, label='Point Density')
@@ -181,11 +184,10 @@ def visualize_density_profile(bin_centers, density, smoothed_density,
         for pos in peak_positions:
             ax1.axvline(pos, color='red', linestyle='--', linewidth=1.5, alpha=0.3)
     
-    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=32)
-    ax1.set_ylabel('Density (Points)', fontsize=27)
-    ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='lower right', fontsize=25)
-    ax1.tick_params(axis='both', which='major', labelsize=28)
+    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=style['axis_label_fontsize'])
+    ax1.set_ylabel('Density (Points)', fontsize=style['axis_label_fontsize'] - 5)
+    apply_axis_style(ax1, style)
+    ax1.legend(loc=style.get('legend_loc', 'lower right'), fontsize=style['legend_fontsize'])
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')

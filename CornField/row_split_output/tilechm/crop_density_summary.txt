@@ -1,0 +1,14 @@
+Crop Density Summary
+============================================================
+Input file: data\tilechm.las
+Crop type: corn
+Method: density
+Total plants: 871
+Total area: 100.00 m²
+Average density: 8.710 plants/m²
+Average height: 2.349 ± 0.289 m
+Height range: [1.297, 2.920] m
+Total time: 82.46s
+
+Per Tile Summary:
+  Tile (0, 0): 871 plants

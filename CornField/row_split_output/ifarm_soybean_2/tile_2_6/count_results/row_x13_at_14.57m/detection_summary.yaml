@@ -1,0 +1,44 @@
+detection_summary:
+  method: height
+  statistics:
+    input_points: 1032
+    detected_plants: 5
+  parameters:
+    direction: y
+    expected_spacing_cm: 8.0
+    bin_size_cm: 0.5
+    ground_removal: true
+    height_metric: max
+  preprocessing:
+    ground_removal:
+      bottom_percentile: 30.0
+      top_percentile: 30.0
+    statistical_outlier_removal:
+      k_neighbors: 20
+      std_ratio: 2.0
+  plants:
+  - id: 1
+    x_m: 14.57
+    y_m: 32.15139900669907
+    height_m: 0.7815627991107962
+  - id: 2
+    x_m: 14.57
+    y_m: 32.28598991578998
+    height_m: 0.7772593896554189
+  - id: 3
+    x_m: 14.57
+    y_m: 32.41559597639604
+    height_m: 0.6610337886389848
+  - id: 4
+    x_m: 14.57
+    y_m: 32.55018688548695
+    height_m: 0.670465490613732
+  - id: 5
+    x_m: 14.57
+    y_m: 32.65486870366877
+    height_m: 0.6862003208597072
+  spacing_statistics:
+    mean_cm: 12.58674242424238
+    std_cm: 1.2399654045761357
+    min_cm: 10.468181818181677
+    max_cm: 13.459090909091032

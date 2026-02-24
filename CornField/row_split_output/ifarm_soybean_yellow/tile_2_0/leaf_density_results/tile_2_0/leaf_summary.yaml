@@ -1,0 +1,13 @@
+leaf_density_summary:
+  input_file: tile_2_0_full.las
+  parameters:
+    voxel_size_m:
+      vx: 0.0045
+      vy: 0.0045
+      vz: 0.0045
+    projection_function_G: 0.5
+    ground_removal_percentile: 15.0
+  results:
+    LAI_m2_m2: 0.7400585910034504
+    LAD_mean_m2_m3: 0.583182498820686
+    LAD_max_m2_m3: 1.66677945769991

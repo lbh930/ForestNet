@@ -10,6 +10,58 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+# 统一绘图样式配置（集中管理所有figure尺寸与字体）
+PLOT_STYLES = {
+    'density_profile': {
+        'figsize': (14, 4),
+        'axis_label_fontsize': 32,
+        'tick_fontsize': 28,
+        'legend_fontsize': 25,
+        'legend_loc': 'lower right'
+    },
+    'height_profile_before_after': {
+        'figsize': (14, 4),
+        'axis_label_fontsize': 32,
+        'tick_fontsize': 28,
+        'legend_fontsize': 25,
+        'legend_loc': 'lower right'
+    },
+    'height_profile_dual': {
+        'figsize': (18, 4.5),
+        'axis_label_fontsize': 32,
+        'tick_fontsize': 28,
+        'legend_fontsize': 24,
+        'legend_loc': 'lower right'
+    },
+    'chm': {
+        'figsize': (16, 8),
+        'axis_label_fontsize': 36,
+        'tick_fontsize': 36,
+        'legend_fontsize': 36,
+        'cbar_label_fontsize': 36,
+        'legend_loc': 'upper left'
+    },
+    'pointcloud_3d': {
+        'figsize': (14, 8),
+        'axis_label_fontsize': 14,
+        'tick_fontsize': 12,
+        'title_fontsize': 16,
+        'cbar_label_fontsize': 12
+    }
+}
+
+
+def get_plot_style(name: str):
+    """获取指定名称的绘图样式配置"""
+    return PLOT_STYLES.get(name, PLOT_STYLES['density_profile'])
+
+
+def apply_axis_style(ax, style: dict):
+    """应用坐标轴字体与网格等基础样式"""
+    ax.tick_params(axis='both', which='major', labelsize=style.get('tick_fontsize', 12))
+    ax.grid(True, alpha=0.3)
+
+
 
 def save_detection_summary_yaml(output_path, summary_data):
     """
@@ -211,48 +263,35 @@ def statistical_outlier_removal(points, k, std_ratio):
 
 
 def visualize_3d_with_peaks(points, peak_positions, direction, output_path, verbose=False):
-    """
-    3D点云可视化，标记检测到的植物位置
-    
-    参数:
-        points: Nx3点云数组
-        peak_positions: 检测到的峰位置
-        direction: 方向轴
-        output_path: 输出文件路径
-    """
-    fig = plt.figure(figsize=(14, 8))
+    """3D点云可视化，使用统一样式"""
+    style = get_plot_style('pointcloud_3d')
+    fig = plt.figure(figsize=style.get('figsize', (14, 8)))
     ax = fig.add_subplot(111, projection='3d')
-    
-    # 绘制点云（根据高度着色）
-    scatter = ax.scatter(points[:, 0], points[:, 1], points[:, 2], 
-                        c=points[:, 2], s=1, cmap='viridis', alpha=0.4)
-    
-    # 标记峰位置（垂直线）
+
+    scatter = ax.scatter(points[:, 0], points[:, 1], points[:, 2],
+                         c=points[:, 2], s=1, cmap='viridis', alpha=0.4)
+
     if len(peak_positions) > 0:
-        z_min = points[:, 2].min()
         z_max = points[:, 2].max()
-        
         for pos in peak_positions:
             if direction.lower() == 'x':
-                # X方向的行，绘制垂直于X的平面线
-                ax.plot([pos, pos], [points[:, 1].min(), points[:, 1].max()], 
-                       [z_max, z_max], 'r-', linewidth=2, alpha=0.7)
-            else:  # y
-                # Y方向的行，绘制垂直于Y的平面线
+                ax.plot([pos, pos], [points[:, 1].min(), points[:, 1].max()],
+                        [z_max, z_max], 'r-', linewidth=2, alpha=0.7)
+            else:
                 ax.plot([points[:, 0].min(), points[:, 0].max()], [pos, pos],
-                       [z_max, z_max], 'r-', linewidth=2, alpha=0.7)
-    
-    ax.set_xlabel('X (m)', fontsize=11)
-    ax.set_ylabel('Y (m)', fontsize=11)
-    ax.set_zlabel('Z (m)', fontsize=11)
-    ax.set_title(f'3D Point Cloud with Detected Plants (n={len(peak_positions)})', 
-                fontsize=13, fontweight='bold')
-    
-    # 添加colorbar
+                        [z_max, z_max], 'r-', linewidth=2, alpha=0.7)
+
+    axis_fs = style.get('axis_label_fontsize', 12)
+    ax.set_xlabel('X (m)', fontsize=axis_fs)
+    ax.set_ylabel('Y (m)', fontsize=axis_fs)
+    ax.set_zlabel('Z (m)', fontsize=axis_fs)
+    ax.set_title(f'3D Point Cloud with Detected Plants (n={len(peak_positions)})',
+                 fontsize=style.get('title_fontsize', axis_fs + 2), fontweight='bold')
+
     cbar = plt.colorbar(scatter, ax=ax, pad=0.1, shrink=0.8)
-    cbar.set_label('Height (m)', fontsize=10)
-    
-    plt.savefig(output_path, dpi=200, bbox_inches='tight')
+    cbar.set_label('Height (m)', fontsize=style.get('cbar_label_fontsize', axis_fs))
+
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close(fig)
     if verbose:
         print(f"  3D可视化已保存: {output_path}")

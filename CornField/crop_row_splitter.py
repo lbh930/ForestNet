@@ -17,6 +17,7 @@ import time
 from scipy.stats import binned_statistic
 from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d, gaussian_filter, distance_transform_edt, binary_dilation
+from common import get_plot_style, apply_axis_style
 import shutil
 
 
@@ -206,7 +207,8 @@ def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
     # 设置子图宽度比例，使其与数据范围成正比
     width_ratios = [x_range, y_range]
     
-    fig, axes = plt.subplots(1, 2, figsize=(18, 4.5), gridspec_kw={'width_ratios': width_ratios})
+    style = get_plot_style('height_profile_dual')
+    fig, axes = plt.subplots(1, 2, figsize=style.get('figsize', (18, 4.5)), gridspec_kw={'width_ratios': width_ratios})
     
     # X-axis height profile
     ax1 = axes[0]
@@ -223,11 +225,10 @@ def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
         ax1.plot(x_centers[x_peaks], x_heights[x_peaks], 'rx', 
                 markersize=8, markeredgewidth=2, label=f'Detected Rows')
     
-    ax1.set_xlabel('X Coordinate (m)', fontsize=32)
-    ax1.set_ylabel('Mean Height (m)', fontsize=30)
-    ax1.tick_params(axis='both', which='major', labelsize=28)
-    ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='lower right', fontsize=24)
+    ax1.set_xlabel('X Coordinate (m)', fontsize=style['axis_label_fontsize'])
+    ax1.set_ylabel('Mean Height (m)', fontsize=style['axis_label_fontsize'] - 2)
+    apply_axis_style(ax1, style)
+    ax1.legend(loc=style.get('legend_loc', 'lower right'), fontsize=style['legend_fontsize'])
 
     # Y-axis height profile
     ax2 = axes[1]
@@ -244,11 +245,10 @@ def plot_height_profiles(x_centers, x_heights, x_peaks, x_smoothed,
         ax2.plot(y_centers[y_peaks], y_heights[y_peaks], 'rx', 
                 markersize=16, markeredgewidth=4, label=f'Detected Rows')
     
-    ax2.set_xlabel('Y Coordinate (m)', fontsize=32)
-    ax2.set_ylabel('Mean Height (m)', fontsize=30)
-    ax2.tick_params(axis='both', which='major', labelsize=28)
-    ax2.grid(True, alpha=0.3)
-    ax2.legend(loc='lower right', fontsize=24)
+    ax2.set_xlabel('Y Coordinate (m)', fontsize=style['axis_label_fontsize'])
+    ax2.set_ylabel('Mean Height (m)', fontsize=style['axis_label_fontsize'] - 2)
+    apply_axis_style(ax2, style)
+    ax2.legend(loc=style.get('legend_loc', 'lower right'), fontsize=style['legend_fontsize'])
 
     plt.tight_layout()
     
@@ -276,8 +276,8 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
         direction_label = 'No rows detected'
         row_count_str = '0 rows'
 
-    fig_width = 16
-    fig_height = 8
+    chm_style = get_plot_style('chm')
+    fig_width, fig_height = chm_style.get('figsize', (16, 8))
     
     # ============= 第一张图：不带分割线 =============
     fig, ax = plt.subplots(1, 1, figsize=(fig_width, fig_height))
@@ -297,14 +297,14 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
             y_pos = y_centers[peak_idx]
             ax.axhline(y=y_pos, color='blue', linewidth=2.5, alpha=0.8, linestyle='-')
     
-    ax.set_xlabel('X Coordinate (m)', fontsize=36)
-    ax.set_ylabel('Y Coordinate (m)', fontsize=36)
-    ax.tick_params(axis='both', which='major', labelsize=36)
+    ax.set_xlabel('X Coordinate (m)', fontsize=chm_style['axis_label_fontsize'])
+    ax.set_ylabel('Y Coordinate (m)', fontsize=chm_style['axis_label_fontsize'])
+    ax.tick_params(axis='both', which='major', labelsize=chm_style['tick_fontsize'])
     
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label('Height (m)', fontsize=36)
-    cbar.ax.tick_params(labelsize=36)
+    cbar.set_label('Height (m)', fontsize=chm_style.get('cbar_label_fontsize', chm_style['axis_label_fontsize']))
+    cbar.ax.tick_params(labelsize=chm_style.get('cbar_label_fontsize', chm_style['tick_fontsize']))
 
     # 图例（不带边界 - 但图例中显示boundary说明）
     from matplotlib.lines import Line2D
@@ -314,8 +314,8 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
             Line2D([0], [0], color='red', linewidth=2.5, linestyle='--', 
                    label='Row boundaries')
         ]
-        ax.legend(handles=legend_elements, loc='upper left', fontsize=36, 
-                  framealpha=0.9, edgecolor='black')
+        ax.legend(handles=legend_elements, loc=chm_style.get('legend_loc', 'upper left'), fontsize=chm_style['legend_fontsize'], 
+              framealpha=0.9, edgecolor='black')
     
     ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
     plt.tight_layout()
@@ -362,14 +362,14 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
                 ax.plot(x_along, y_min_bound, 'r--', linewidth=2.0, alpha=0.7)
                 ax.plot(x_along, y_max_bound, 'r--', linewidth=2.0, alpha=0.7)
     
-    ax.set_xlabel('X Coordinate (m)', fontsize=36)
-    ax.set_ylabel('Y Coordinate (m)', fontsize=36)
-    ax.tick_params(axis='both', which='major', labelsize=36)
+    ax.set_xlabel('X Coordinate (m)', fontsize=chm_style['axis_label_fontsize'])
+    ax.set_ylabel('Y Coordinate (m)', fontsize=chm_style['axis_label_fontsize'])
+    ax.tick_params(axis='both', which='major', labelsize=chm_style['tick_fontsize'])
     
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label('Height (m)', fontsize=36)
-    cbar.ax.tick_params(labelsize=36)
+    cbar.set_label('Height (m)', fontsize=chm_style.get('cbar_label_fontsize', chm_style['axis_label_fontsize']))
+    cbar.ax.tick_params(labelsize=chm_style.get('cbar_label_fontsize', chm_style['tick_fontsize']))
 
     # 图例（带边界）
     legend_elements = []
@@ -393,8 +393,8 @@ def create_chm_visualization(chm_smoothed, x_min, x_max, y_min, y_max,
             )
     
     if legend_elements:
-        ax.legend(handles=legend_elements, loc='upper left', fontsize=36, 
-                  framealpha=0.9, edgecolor='black')
+        ax.legend(handles=legend_elements, loc=chm_style.get('legend_loc', 'upper left'), fontsize=chm_style['legend_fontsize'], 
+              framealpha=0.9, edgecolor='black')
     
     ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
     plt.tight_layout()

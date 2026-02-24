@@ -263,7 +263,7 @@ def main():
         sys.exit(1)
 
     input_path = Path(sys.argv[1])
-    vx = vy = vz = 0.005
+    vx = vy = vz = 0.0045
     G = 0.5
     ground_percentile = 15.0
     visualize_voxel = ('--visualize_voxel' in sys.argv)

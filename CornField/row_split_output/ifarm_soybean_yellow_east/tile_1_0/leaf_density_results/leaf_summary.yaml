@@ -1,0 +1,196 @@
+leaf_density_summary:
+  input_file: row_x04_at_-22.36m.las
+  statistics:
+    input_points: 485486
+    filtered_points: 459540
+    occupied_voxels: 56246
+    total_voxels: 155618
+  parameters:
+    voxel_size:
+      vx_m: 0.05
+      vy_m: 0.05
+      vz_m: 0.03
+    ground_removal:
+      bottom_percentile: 10.0
+    beer_lambert:
+      projection_function_G: 0.5
+  results:
+    lad_statistics:
+      mean_m2_m3: 11.649604972136185
+      median_m2_m3: 11.649604972136185
+      max_m2_m3: 11.649604972136185
+      std_m2_m3: 0.0
+    lai_estimate:
+      total_m2_m2: 0.34948814916408555
+      description: Leaf Area Index estimated by integrating LAD over height
+  height_layers:
+  - layer_index: 0
+    height_m: 0.17520005941390993
+    lad_m2_m3: 11.649604972136185
+    occupancy: 0.7070133275071008
+    gap_probability: 0.2929866724928992
+  - layer_index: 1
+    height_m: 0.2052000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.7539873279440682
+    gap_probability: 0.2460126720559318
+  - layer_index: 2
+    height_m: 0.23520005941390992
+    lad_m2_m3: 0.0
+    occupancy: 0.7539873279440682
+    gap_probability: 0.2460126720559318
+  - layer_index: 3
+    height_m: 0.2652000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.7345422766003933
+    gap_probability: 0.2654577233996067
+  - layer_index: 4
+    height_m: 0.2952000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.7063578763382128
+    gap_probability: 0.2936421236617872
+  - layer_index: 5
+    height_m: 0.3252000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.6864758575486126
+    gap_probability: 0.3135241424513874
+  - layer_index: 6
+    height_m: 0.3552000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.6668123224819751
+    gap_probability: 0.3331876775180249
+  - layer_index: 7
+    height_m: 0.3852000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.6421236617871968
+    gap_probability: 0.3578763382128032
+  - layer_index: 8
+    height_m: 0.4152000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.6169980336464933
+    gap_probability: 0.3830019663535067
+  - layer_index: 9
+    height_m: 0.4452000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.5923093729517152
+    gap_probability: 0.40769062704828485
+  - layer_index: 10
+    height_m: 0.4752000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.5615031680139829
+    gap_probability: 0.4384968319860171
+  - layer_index: 11
+    height_m: 0.5052000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.5296045444614377
+    gap_probability: 0.4703954555385623
+  - layer_index: 12
+    height_m: 0.5352000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.5016386279222198
+    gap_probability: 0.4983613720777802
+  - layer_index: 13
+    height_m: 0.5652000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.46842910203189864
+    gap_probability: 0.5315708979681013
+  - layer_index: 14
+    height_m: 0.59520005941391
+    lad_m2_m3: 0.0
+    occupancy: 0.4354380598645401
+    gap_probability: 0.5645619401354599
+  - layer_index: 15
+    height_m: 0.6252000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.39348918505571334
+    gap_probability: 0.6065108149442866
+  - layer_index: 16
+    height_m: 0.6552000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.3620275289490933
+    gap_probability: 0.6379724710509067
+  - layer_index: 17
+    height_m: 0.6852000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.32051562158619185
+    gap_probability: 0.6794843784138082
+  - layer_index: 18
+    height_m: 0.7152000594139098
+    lad_m2_m3: 0.0
+    occupancy: 0.28774306314179593
+    gap_probability: 0.7122569368582041
+  - layer_index: 19
+    height_m: 0.7452000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.2619619838322045
+    gap_probability: 0.7380380161677955
+  - layer_index: 20
+    height_m: 0.7752000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.22831549049595806
+    gap_probability: 0.7716845095040419
+  - layer_index: 21
+    height_m: 0.8052000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.20843347170635787
+    gap_probability: 0.7915665282936422
+  - layer_index: 22
+    height_m: 0.8352000594139098
+    lad_m2_m3: 0.0
+    occupancy: 0.19401354599082368
+    gap_probability: 0.8059864540091763
+  - layer_index: 23
+    height_m: 0.8652000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.16976185274197073
+    gap_probability: 0.8302381472580292
+  - layer_index: 24
+    height_m: 0.8952000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.15206467118199693
+    gap_probability: 0.847935328818003
+  - layer_index: 25
+    height_m: 0.9252000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.12497268953462967
+    gap_probability: 0.8750273104653703
+  - layer_index: 26
+    height_m: 0.9552000594139098
+    lad_m2_m3: 0.0
+    occupancy: 0.09394800087393489
+    gap_probability: 0.9060519991260652
+  - layer_index: 27
+    height_m: 0.9852000594139099
+    lad_m2_m3: 0.0
+    occupancy: 0.06969630762508193
+    gap_probability: 0.9303036923749181
+  - layer_index: 28
+    height_m: 1.01520005941391
+    lad_m2_m3: 0.0
+    occupancy: 0.03779768407253659
+    gap_probability: 0.9622023159274634
+  - layer_index: 29
+    height_m: 1.04520005941391
+    lad_m2_m3: 0.0
+    occupancy: 0.016386279222197948
+    gap_probability: 0.9836137207778021
+  - layer_index: 30
+    height_m: 1.07520005941391
+    lad_m2_m3: 0.0
+    occupancy: 0.008083897749617654
+    gap_probability: 0.9919161022503823
+  - layer_index: 31
+    height_m: 1.1052000594139098
+    lad_m2_m3: 0.0
+    occupancy: 0.0017478697837011142
+    gap_probability: 0.9982521302162989
+  - layer_index: 32
+    height_m: 1.13520005941391
+    lad_m2_m3: 0.0
+    occupancy: 0.00043696744592527855
+    gap_probability: 0.9995630325540747
+  - layer_index: 33
+    height_m: 1.1652000594139098
+    lad_m2_m3: 0.0
+    occupancy: 0.00021848372296263927
+    gap_probability: 0.9997815162770374

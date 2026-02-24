@@ -21,7 +21,9 @@ from common import (
     remove_ground_points,
     statistical_outlier_removal,
     visualize_3d_with_peaks,
-    calculate_peak_heights
+    calculate_peak_heights,
+    get_plot_style,
+    apply_axis_style
 )
 
 
@@ -261,7 +263,7 @@ def detect_plants_from_height(bin_centers, heights, expected_spacing,
     return peak_positions, peak_heights, smoothed_heights
 
 
-def visualize_height_profile(bin_centers, max_heights, mean_heights, 
+def visualize_height_profile(bin_centers, max_heights, mean_heights,
                              percentile_95_heights, smoothed_heights,
                              peak_positions, peak_heights, raw_counts,
                              output_path, direction, height_metric, verbose=False):
@@ -286,7 +288,8 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
     base_path = output_path.parent / output_path.stem
     
     # 图1：kernel处理前 - 高度曲线对比
-    fig1, ax1 = plt.subplots(1, 1, figsize=(14, 4))
+    style_before = get_plot_style('height_profile_before_after')
+    fig1, ax1 = plt.subplots(1, 1, figsize=style_before.get('figsize', (14, 4)))
     
     ax1.plot(bin_centers, max_heights, 'r-', linewidth=1, alpha=0.3, label='Max Height')
     ax1.plot(bin_centers, percentile_95_heights, 'orange', linewidth=1, alpha=0.5, label='95th Percentile Height')
@@ -304,11 +307,10 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
         for pos in peak_positions:
             ax1.axvline(pos, color='red', linestyle='--', linewidth=1, alpha=0.3)
     
-    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=32)
-    ax1.set_ylabel('Height (m)', fontsize=28)
-    ax1.grid(True, alpha=0.3)
-    ax1.legend(loc='lower right', fontsize=25)
-    ax1.tick_params(axis='both', which='major', labelsize=28)
+    ax1.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=style_before['axis_label_fontsize'])
+    ax1.set_ylabel('Height (m)', fontsize=style_before['axis_label_fontsize'] - 4)
+    apply_axis_style(ax1, style_before)
+    ax1.legend(loc=style_before.get('legend_loc', 'lower right'), fontsize=style_before['legend_fontsize'])
     
     plt.tight_layout()
     output_path_1 = f"{base_path}_before_kernel.png"
@@ -319,7 +321,8 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
         print(f"  可视化已保存: {output_path_1}")
     
     # 图2：kernel处理后 - 使用的高度曲线
-    fig2, ax2 = plt.subplots(1, 1, figsize=(14, 4))
+    style_after = style_before  # 同一风格
+    fig2, ax2 = plt.subplots(1, 1, figsize=style_after.get('figsize', (14, 4)))
     
     # 只显示最终用于检测的kernel processed height
     ax2.plot(bin_centers, smoothed_heights, 'b-', linewidth=2, 
@@ -335,11 +338,10 @@ def visualize_height_profile(bin_centers, max_heights, mean_heights,
         for pos in peak_positions:
             ax2.axvline(pos, color='red', linestyle='--', linewidth=1, alpha=0.3)
     
-    ax2.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=32)
-    ax2.set_ylabel('Height (m)', fontsize=32)
-    ax2.grid(True, alpha=0.3)
-    ax2.legend(loc='lower right', fontsize=25)
-    ax2.tick_params(axis='both', which='major', labelsize=28)
+    ax2.set_xlabel(f'{direction.upper()} Coordinate (m)', fontsize=style_after['axis_label_fontsize'])
+    ax2.set_ylabel('Height (m)', fontsize=style_after['axis_label_fontsize'])
+    apply_axis_style(ax2, style_after)
+    ax2.legend(loc=style_after.get('legend_loc', 'lower right'), fontsize=style_after['legend_fontsize'])
     
     plt.tight_layout()
     output_path_2 = f"{base_path}_after_kernel.png"

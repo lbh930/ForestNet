@@ -1,0 +1,17 @@
+Crop Density Summary
+============================================================
+Input file: data\ifarm_soybean_green_west.las
+Crop type: soybean
+Method: height
+Total plants: 7416
+Total area: 400.00 m²
+Average density: 18.540 plants/m²
+Average height: 0.698 ± 0.117 m
+Height range: [0.218, 1.181] m
+Total time: 178.32s
+
+Per Tile Summary:
+  Tile (1, 0): 1911 plants
+  Tile (2, 0): 1646 plants
+  Tile (1, 1): 2028 plants
+  Tile (0, 1): 1831 plants

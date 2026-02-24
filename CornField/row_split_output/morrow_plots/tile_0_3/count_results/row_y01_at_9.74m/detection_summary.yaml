@@ -1,0 +1,107 @@
+detection_summary:
+  method: density
+  statistics:
+    input_points: 87460
+    detected_plants: 21
+  parameters:
+    direction: x
+    expected_spacing_cm: 7.000000000000001
+    bin_size_cm: 1.0
+    ground_removal: true
+  preprocessing:
+    ground_removal:
+      bottom_percentile: 20.0
+      top_percentile: 30.0
+    statistical_outlier_removal:
+      k_neighbors: 20
+      std_ratio: 2.0
+  plants:
+  - id: 1
+    x_m: -22.921248418605074
+    y_m: 9.74
+    height_m: 1.3070000000000004
+  - id: 2
+    x_m: -22.801325014349757
+    y_m: 9.74
+    height_m: 2.2250000000000005
+  - id: 3
+    x_m: -22.16173352498805
+    y_m: 9.74
+    height_m: 2.471
+  - id: 4
+    x_m: -22.03181650371146
+    y_m: 9.74
+    height_m: 2.45
+  - id: 5
+    x_m: -21.93188033349869
+    y_m: 9.74
+    height_m: 2.4560000000000004
+  - id: 6
+    x_m: -21.78197607817954
+    y_m: 9.74
+    height_m: 2.444
+  - id: 7
+    x_m: -21.59209735477529
+    y_m: 9.74
+    height_m: 2.277
+  - id: 8
+    x_m: -21.522142035626352
+    y_m: 9.74
+    height_m: 2.3360000000000003
+  - id: 9
+    x_m: -21.402218631371035
+    y_m: 9.74
+    height_m: 2.492
+  - id: 10
+    x_m: -21.312276078179544
+    y_m: 9.74
+    height_m: 2.6109999999999998
+  - id: 11
+    x_m: -21.172365439881673
+    y_m: 9.74
+    height_m: 2.613
+  - id: 12
+    x_m: -19.573386716477415
+    y_m: 9.74
+    height_m: 2.384
+  - id: 13
+    x_m: -19.09369309945614
+    y_m: 9.74
+    height_m: 2.2960000000000003
+  - id: 14
+    x_m: -18.80387820583912
+    y_m: 9.74
+    height_m: 2.151
+  - id: 15
+    x_m: -16.725205865413585
+    y_m: 9.74
+    height_m: 2.278
+  - id: 16
+    x_m: -16.655250546264647
+    y_m: 9.74
+    height_m: 2.301
+  - id: 17
+    x_m: -16.18555054626465
+    y_m: 9.74
+    height_m: 1.9690000000000003
+  - id: 18
+    x_m: -15.845767567541243
+    y_m: 9.74
+    height_m: 2.2
+  - id: 19
+    x_m: -15.755825014349755
+    y_m: 9.74
+    height_m: 2.208
+  - id: 20
+    x_m: -15.675876078179542
+    y_m: 9.74
+    height_m: 2.46
+  - id: 21
+    x_m: -14.56658458881784
+    y_m: 9.74
+    height_m: 0.6709999999999998
+  spacing_statistics:
+    mean_cm: 41.773319148936174
+    std_cm: 54.052997716277474
+    min_cm: 6.99553191489386
+    max_cm: 207.8672340425534

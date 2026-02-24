@@ -1,0 +1,33 @@
+Crop Density Summary
+============================================================
+Input file: data\morrow_plots.las
+Crop type: corn
+Method: density
+Total plants: 13231
+Total area: 2000.00 m²
+Average density: 6.615 plants/m²
+Average height: 1.977 ± 0.378 m
+Height range: [0.175, 2.832] m
+Total time: 322.81s
+
+Per Tile Summary:
+  Tile (0, 4): 413 plants
+  Tile (1, 4): 212 plants
+  Tile (0, 3): 516 plants
+  Tile (0, 0): 773 plants
+  Tile (0, 2): 516 plants
+  Tile (0, 1): 805 plants
+  Tile (1, 3): 582 plants
+  Tile (1, 0): 815 plants
+  Tile (2, 0): 770 plants
+  Tile (1, 2): 554 plants
+  Tile (2, 1): 784 plants
+  Tile (1, 1): 852 plants
+  Tile (2, 4): 544 plants
+  Tile (2, 3): 720 plants
+  Tile (3, 4): 535 plants
+  Tile (2, 2): 765 plants
+  Tile (3, 0): 762 plants
+  Tile (3, 1): 779 plants
+  Tile (3, 3): 747 plants
+  Tile (3, 2): 787 plants

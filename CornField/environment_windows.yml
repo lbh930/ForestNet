@@ -11,5 +11,6 @@ dependencies:
   - matplotlib
   - open3d
   - laspy
+  - PyYAML
   - pip:
       - laspy[lazrs,laszip]
