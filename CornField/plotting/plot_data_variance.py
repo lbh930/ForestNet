@@ -121,10 +121,12 @@ for i in range(len(fields)):
 
 fig, ax = plt.subplots(figsize=(12, 12), constrained_layout=True)
 
-#shift right a bit to center bars
-bars = ax.bar(field_lai, lai_valid, 
-              color=colors[:len(field_lai)], edgecolor="black", linewidth=2)
+# First bar black; keep the original 2nd-4th bar colors.
+bar_colors = ["#000000", "#DDAA33", "#BB5566", "#004488"][:len(field_lai)]
+bars = ax.bar(field_lai, lai_valid, color=bar_colors, edgecolor="black", linewidth=2)
 
+ax.grid(True, linestyle='--', alpha=0.7, linewidth=2)
+ax.set_axisbelow(True)
 
 ax.set_xticklabels(field_lai, rotation=35, ha='right', fontsize=font_size*0.8)
 
