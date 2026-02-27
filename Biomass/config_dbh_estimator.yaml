@@ -1,0 +1,54 @@
+input_data:
+  point_cloud_file_path: "data/L1W.laz"
+
+dbh_estimator_output:
+  output_root_directory_path: "output"
+  output_json_filename: "forest_tree_dbh_height.json"
+
+runtime_progress_logging:
+  enable_progress_prints: true
+
+dbh_estimator:
+  chunk_size: 2000000
+  max_chunks: null
+  ground_grid_cell_size_meters: 0.5
+  ground_valid_ratio_threshold: 0.02
+  ground_smoothing_median_filter_size: 3
+  ground_classification_value: 2
+  chm_cell_size_meters: 0.4
+  chm_gaussian_sigma: 1.0
+  chm_local_max_window_size: 13
+  chm_min_peak_height_meters: 4.0
+  chm_min_peak_separation_meters: 1.5
+  breast_height_meters: 1.3
+  breast_height_window_meters: 0.35
+  slice_downsample_xy_size_meters: 0.02
+  minimum_slice_points_per_tree: 45
+  top_to_slice_search_radius_meters: 4.0
+  maximum_top_to_stem_offset_meters: 3.8
+  local_stem_density_cell_size_meters: 0.08
+  local_stem_min_cell_points: 3
+  dbh_fit_radius_meters: 0.75
+  minimum_points_for_dbh_fit: 8
+  deduplication_min_stem_distance_meters: 1.0
+  circle_ransac_iterations: 180
+  circle_ransac_inlier_threshold_meters: 0.035
+  circle_min_inlier_ratio: 0.30
+  circle_max_rmse_meters: 0.07
+  minimum_dbh_centimeters: 5.0
+  maximum_dbh_centimeters: 150.0
+  minimum_height_for_assignment_meters: 0.5
+  maximum_tree_height_meters: 80.0
+  height_assignment_base_radius_meters: 1.8
+  height_assignment_dbh_multiplier: 5.5
+  height_assignment_min_radius_meters: 1.4
+  height_assignment_max_radius_meters: 4.8
+  height_assignment_xy_downsample_meters: 0.18
+  height_hist_bin_size_meters: 0.1
+  height_percentile: 99.5
+  minimum_points_for_height: 60
+  random_seed: 42
+  enable_diagnostic_plots: true
+  diagnostic_overview_max_points: 120000
+  diagnostic_fit_examples_count: 18
+  diagnostic_points_per_fit_example: 320

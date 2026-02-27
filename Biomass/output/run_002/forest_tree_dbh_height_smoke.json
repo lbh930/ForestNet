@@ -1,0 +1,92 @@
+{
+  "input_point_cloud_file_path": "data/L1W.laz",
+  "tree_count": 5,
+  "parameters": {
+    "chunk_size": 600000,
+    "max_chunks": 2,
+    "ground_grid_cell_size_meters": 0.5,
+    "ground_valid_ratio_threshold": 0.02,
+    "ground_smoothing_median_filter_size": 3,
+    "ground_classification_value": 2,
+    "breast_height_meters": 1.3,
+    "breast_height_window_meters": 0.2,
+    "slice_downsample_xy_size_meters": 0.02,
+    "slice_cluster_cell_size_meters": 0.05,
+    "slice_cluster_min_points_per_cell": 2,
+    "minimum_slice_points_per_tree": 45,
+    "circle_ransac_iterations": 180,
+    "circle_ransac_inlier_threshold_meters": 0.035,
+    "circle_min_inlier_ratio": 0.38,
+    "circle_max_rmse_meters": 0.055,
+    "minimum_dbh_centimeters": 5.0,
+    "maximum_dbh_centimeters": 150.0,
+    "minimum_height_for_assignment_meters": 0.5,
+    "maximum_tree_height_meters": 80.0,
+    "height_assignment_base_radius_meters": 1.8,
+    "height_assignment_dbh_multiplier": 5.5,
+    "height_assignment_min_radius_meters": 1.4,
+    "height_assignment_max_radius_meters": 4.8,
+    "height_assignment_xy_downsample_meters": 0.18,
+    "height_hist_bin_size_meters": 0.1,
+    "height_percentile": 99.5,
+    "minimum_points_for_height": 60,
+    "random_seed": 42
+  },
+  "trees": [
+    {
+      "tree_id": 1,
+      "x_meters": -56.0186,
+      "y_meters": 25.5751,
+      "dbh_centimeters": 36.242,
+      "height_meters": 31.85,
+      "slice_point_count": 182,
+      "height_point_count": 452,
+      "fit_inlier_ratio": 0.9011,
+      "fit_rmse_meters": 0.0223
+    },
+    {
+      "tree_id": 2,
+      "x_meters": -55.6107,
+      "y_meters": -30.548,
+      "dbh_centimeters": 51.738,
+      "height_meters": 34.75,
+      "slice_point_count": 278,
+      "height_point_count": 562,
+      "fit_inlier_ratio": 0.8669,
+      "fit_rmse_meters": 0.0241
+    },
+    {
+      "tree_id": 3,
+      "x_meters": -55.5392,
+      "y_meters": 33.1304,
+      "dbh_centimeters": 50.897,
+      "height_meters": 31.65,
+      "slice_point_count": 254,
+      "height_point_count": 514,
+      "fit_inlier_ratio": 0.8937,
+      "fit_rmse_meters": 0.0286
+    },
+    {
+      "tree_id": 4,
+      "x_meters": -55.3549,
+      "y_meters": -19.2351,
+      "dbh_centimeters": 40.249,
+      "height_meters": 33.95,
+      "slice_point_count": 222,
+      "height_point_count": 482,
+      "fit_inlier_ratio": 0.9009,
+      "fit_rmse_meters": 0.0247
+    },
+    {
+      "tree_id": 5,
+      "x_meters": -54.8868,
+      "y_meters": -40.8674,
+      "dbh_centimeters": 17.51,
+      "height_meters": 33.95,
+      "slice_point_count": 57,
+      "height_point_count": 274,
+      "fit_inlier_ratio": 0.8421,
+      "fit_rmse_meters": 0.0311
+    }
+  ]
+}
